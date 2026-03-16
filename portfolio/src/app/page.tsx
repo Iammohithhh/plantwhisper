@@ -425,22 +425,11 @@ function Demo() {
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const HF_API =
-    process.env.NEXT_PUBLIC_HF_API_URL ||
-    "https://Iammohithhh-plantwhisper.hf.space";
+  // Use Vercel rewrite proxy to avoid CORS issues with HF Spaces
+  const API_BASE = "/hf-api";
 
-  const [backendStatus, setBackendStatus] = useState<
-    "checking" | "online" | "waking"
-  >("checking");
   const [retryCount, setRetryCount] = useState(0);
   const lastFileRef = useRef<File | null>(null);
-
-  // Ping backend on mount to wake it up early
-  useState(() => {
-    fetch(`${HF_API}/`, { method: "GET", mode: "no-cors" })
-      .then(() => setBackendStatus("online"))
-      .catch(() => setBackendStatus("waking"));
-  });
 
   async function analyzeImage(file: File, attempt = 0): Promise<void> {
     setLoading(true);
@@ -456,12 +445,12 @@ function Demo() {
 
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 60000);
+      const timeout = setTimeout(() => controller.abort(), 90000);
 
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch(`${HF_API}/api/analyze`, {
+      const res = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
         body: formData,
         signal: controller.signal,
@@ -471,7 +460,6 @@ function Demo() {
       if (!res.ok) throw new Error("Analysis failed");
       const data = await res.json();
       setResult(data);
-      setBackendStatus("online");
       setRetryCount(0);
     } catch {
       if (attempt < MAX_RETRIES) {
