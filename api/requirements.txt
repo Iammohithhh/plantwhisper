@@ -13,5 +13,5 @@ soundfile
 librosa
 edge-tts
 groq
-pytorch-grad-cam
+grad-cam
 ultralytics
