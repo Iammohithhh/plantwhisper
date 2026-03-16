@@ -4,7 +4,6 @@ Serves the full analysis pipeline (diffusion-only, no synthetic fallback) as a R
 """
 
 import os
-import sys
 import io
 import tempfile
 import base64
@@ -13,9 +12,6 @@ from PIL import Image
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
-# Add parent directory so we can import the backend
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "webapp"))
 
 import backend as pw
 
