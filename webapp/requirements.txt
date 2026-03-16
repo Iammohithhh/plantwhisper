@@ -10,6 +10,7 @@ numpy
 Pillow
 scipy
 soundfile
+librosa
 edge-tts
 groq
 grad-cam
