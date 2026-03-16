@@ -232,7 +232,9 @@ print("Loading diffusion model...")
 try:
     if os.path.exists(DIFFUSION_CHECKPOINT):
         diffusion_model = ConditionalUNet().to(device)
-        diffusion_model.load_state_dict(torch.load(DIFFUSION_CHECKPOINT, map_location=device))
+        diffusion_model.load_state_dict(
+            torch.load(DIFFUSION_CHECKPOINT, map_location=device, weights_only=True)
+        )
         diffusion_model.eval()
         diffusion_process = SimpleDiffusion(n_steps=500, device=device)
         DIFFUSION_AVAILABLE = True

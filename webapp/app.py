@@ -412,7 +412,6 @@ with gr.Blocks(css=CSS, title="🌱 PlantWhisper", theme=_THEME) as demo:
         gr.Examples(
             examples=[[f] for f in _examples],
             inputs=[input_image],
-            label="Try an example",
         )
 
 
