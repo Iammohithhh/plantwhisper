@@ -42,8 +42,8 @@ Plants emit ultrasonic clicks (20-150 kHz) when stressed through a process calle
 ## 🎬 Demo
 
 <p align="center">
-  <img src="assets/demo_healthy.png" alt="Healthy Plant Analysis" width="45%"/>
-  <img src="assets/demo_stressed.png" alt="Stressed Plant Analysis" width="45%"/>
+  <img src="assets/corn_1.jfif" alt="Healthy Plant Analysis" width="45%"/>
+  <img src="assets/dis_corn.jfif" alt="Stressed Plant Analysis" width="45%"/>
 </p>
 
 | Healthy Plant (7% Stress) | Stressed Plant (83% Stress) |
