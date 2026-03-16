@@ -88,7 +88,13 @@ try:
     
     wrapped_model = HFModelWrapper(classifier)
     wrapped_model.eval()
-    target_layer = classifier.mobilenet_v2.layer[-1]
+    # HF MobileNetV2Model stores blocks in .mobilenet_v2.layer (ModuleList)
+    # Fall back to last conv block if attribute path differs between versions
+    try:
+        target_layer = classifier.mobilenet_v2.layer[-1]
+    except (AttributeError, IndexError):
+        # torchvision-style path
+        target_layer = classifier.mobilenet_v2.features[-1]
     grad_cam = GradCAM(model=wrapped_model, target_layers=[target_layer])
     GRADCAM_AVAILABLE = True
     print("✓ Grad-CAM loaded")
@@ -174,10 +180,11 @@ def classify_plant(image: np.ndarray) -> dict:
     label = classifier.config.id2label[top_idx.item()]
     confidence = top_prob.item()
     is_healthy = "healthy" in label.lower()
-    
+
     return {
         'is_healthy': is_healthy,
         'confidence': confidence,
+        'label': label,
     }
 
 
@@ -388,10 +395,13 @@ def generate_voice_audio(text: str, stress_level: float) -> str:
     """Generate TTS audio file."""
     if not TTS_AVAILABLE:
         return None
-    
+
     try:
-        output_path = tempfile.mktemp(suffix=".mp3")
-        asyncio.run(text_to_speech_async(text, output_path, stress_level))
+        tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+        output_path = tmp.name
+        tmp.close()
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(text_to_speech_async(text, output_path, stress_level))
         return output_path
     except:
         return None
@@ -437,7 +447,9 @@ def generate_ultrasonic_audio(stress_level: float, duration: int = 10) -> str:
         # Normalize
         audio = audio / (np.max(np.abs(audio)) + 1e-8) * 0.8
         
-        output_path = tempfile.mktemp(suffix=".wav")
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        output_path = tmp.name
+        tmp.close()
         sf.write(output_path, audio.astype(np.float32), TARGET_SR)
         return output_path
     except:
@@ -492,6 +504,7 @@ def analyze_plant(image: np.ndarray):
 | Metric | Value |
 |--------|-------|
 | Health Status | {"✅ Healthy" if classification['is_healthy'] else "⚠️ Stress Detected"} |
+| Classification | {classification['label']} |
 | Confidence | {classification['confidence']:.1%} |
 | Ultrasonic Clicks | {pops_per_hour:.1f} per hour |
 
@@ -645,25 +658,28 @@ with gr.Blocks(css=css, title="🌱 PlantWhisper") as demo:
         ]
     )
     
-    # Examples
-    gr.Examples(
-        examples=[
-            ["examples/healthy_leaf.jpg"],
-            ["examples/diseased_leaf.jpg"],
-        ],
-        inputs=[input_image],
-        outputs=[
-            output_segmented,
-            output_gradcam,
-            output_status,
-            output_recommendations,
-            output_speech,
-            output_voice,
-            output_ultrasonic
-        ],
-        fn=analyze_plant,
-        cache_examples=False
-    ) if os.path.exists("examples") else None
+    # Examples — use assets from repo (parent dir on HF Spaces, sibling locally)
+    _examples_dir = Path(__file__).parent.parent / "assets"
+    _example_files = [
+        str(p) for p in sorted(_examples_dir.glob("*.jfif"))
+        if p.is_file()
+    ] if _examples_dir.exists() else []
+    if _example_files:
+        gr.Examples(
+            examples=[[f] for f in _example_files],
+            inputs=[input_image],
+            outputs=[
+                output_segmented,
+                output_gradcam,
+                output_status,
+                output_recommendations,
+                output_speech,
+                output_voice,
+                output_ultrasonic
+            ],
+            fn=analyze_plant,
+            cache_examples=False
+        )
 
 
 # ============================================
