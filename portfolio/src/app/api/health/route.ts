@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 const HF_BACKEND =
-  process.env.HF_API_URL || "https://Iammohithhh-plantwhisper.hf.space";
+  process.env.HF_API_URL || "https://mohithmaddur-plantwhisper-api.hf.space";
 
 export async function GET() {
   try {
