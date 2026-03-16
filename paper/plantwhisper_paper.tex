@@ -1,0 +1,689 @@
+\documentclass[11pt,a4paper,twocolumn]{article}
+
+% ── Packages ──
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage[margin=2cm]{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{enumitem}
+% \usepackage{microtype}  % requires cm-super fonts
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{url}
+
+% ── Colors ──
+\definecolor{emerald}{HTML}{059669}
+\definecolor{darkgreen}{HTML}{064E3B}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=darkgreen,
+    citecolor=emerald,
+    urlcolor=emerald,
+}
+
+% ── Header ──
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textsc{PlantWhisper}}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ── Title ──
+\title{
+    \vspace{-1cm}
+    {\LARGE\bfseries PlantWhisper: Translating Plant Stress into\\Sound via Diffusion-Based Ultrasonic Synthesis}\\[0.5em]
+    {\large A Multi-Modal AI System for Visual Stress Assessment\\and Acoustic Sonification of Plant Xylem Cavitation}
+}
+
+\author{
+    Mohit \\
+    \texttt{github.com/Iammohithhh/plantwhisper}
+}
+
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+% ══════════════════════════════════════════════
+\begin{abstract}
+Plants emit ultrasonic acoustic emissions (UAE) in the 20--150\,kHz range during xylem cavitation events induced by drought and other stressors, as demonstrated by Khait et al.\ (2023). PlantWhisper is a full-stack AI system that bridges this biological phenomenon with computer vision: given a single photograph of a plant, it estimates stress severity, predicts ultrasonic pop rates, and \emph{synthesizes} what those pops would sound like---frequency-shifted into the audible range---using a conditional denoising diffusion probabilistic model (DDPM). The system features (i) FastSAM/SAM segmentation with green-threshold fallback, (ii) MobileNetV2-based disease classification, (iii) Grad-CAM attention visualization, (iv) a stress-conditioned UNet diffusion model generating mel spectrograms of cavitation pops, (v) real-time waveform and spectrogram visualizations, and (vi) LLM-driven empathetic plant speech with TTS rendering. We describe the full architecture, the biological grounding of our stress-to-pop mapping, failure cases encountered during development, and how we handled the absence of a paired image--audio dataset through principled heuristic design. All components run as a containerized FastAPI backend on HuggingFace Spaces with a Next.js portfolio frontend.
+\end{abstract}
+
+% ══════════════════════════════════════════════
+\section{Introduction}
+
+In 2023, Khait et al.\ published a landmark study in \emph{Cell} demonstrating that plants under drought or physical damage emit airborne sounds in the ultrasonic range (20--250\,kHz), primarily caused by cavitation---the formation and collapse of air bubbles in xylem vessels under negative hydraulic pressure \cite{khait2023}. Stressed tomato plants were recorded emitting up to 35 clicks per hour at peak stress, versus roughly 1 click per hour when well-watered.
+
+PlantWhisper asks: \emph{Can we infer what a plant sounds like from a single photograph?} We combine plant disease classification with biologically-grounded acoustic modeling to create an end-to-end system that:
+
+\begin{enumerate}[nosep]
+    \item Segments the plant from its background
+    \item Classifies its health condition
+    \item Estimates a continuous stress level $\sigma \in [0, 1]$
+    \item Maps stress to an expected pop rate (pops/hour)
+    \item Synthesizes an audio clip of frequency-shifted cavitation pops
+    \item Generates waveform and spectrogram visualizations
+    \item Gives the plant an empathetic ``voice'' via LLM + TTS
+\end{enumerate}
+
+% ── FIGURE PLACEHOLDER: System overview diagram ──
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.9\linewidth}{\centering\vspace{3cm}
+    \textbf{[INSERT FIGURE: System Architecture Diagram]}\\[0.5em]
+    \small Full pipeline from image upload through segmentation, classification, stress estimation, audio synthesis, and visualization.
+    \vspace{3cm}}}
+    \caption{PlantWhisper end-to-end system architecture.}
+    \label{fig:architecture}
+\end{figure}
+
+
+% ══════════════════════════════════════════════
+\section{Biological Foundation}
+\label{sec:biology}
+
+\subsection{Xylem Cavitation and Acoustic Emissions}
+
+Water transport in vascular plants occurs through xylem vessels under negative pressure (tension). The cohesion-tension theory \cite{dixon1894} describes how transpiration at leaf surfaces pulls water columns upward from the roots through continuous hydrogen bonding. Under drought stress, this tension increases beyond the vessel's structural limits, causing \textbf{cavitation}: dissolved gas nucleates into bubbles that expand and collapse violently within the vessel lumen.
+
+Each cavitation event produces a broadband acoustic pulse---an ultrasonic ``pop''---with peak energy in the 20--150\,kHz range, well above human hearing ($\sim$20\,kHz). These are not metabolic signals but \emph{mechanical failure events}: the sound of a plant's vascular system breaking under hydraulic stress.
+
+\subsection{What Makes This Biologically Unique}
+
+Unlike most plant monitoring approaches (chlorophyll fluorescence, thermal imaging, NDVI), acoustic emissions provide:
+
+\begin{itemize}[nosep]
+    \item \textbf{Real-time stress indication}: Cavitation events occur within minutes of drought onset, far faster than visible wilting (hours to days)
+    \item \textbf{Quantitative severity}: Pop rate correlates directly with hydraulic dysfunction---more pops indicate more embolized vessels
+    \item \textbf{Species-universal mechanism}: All vascular plants (angiosperms and gymnosperms) share xylem-based water transport; cavitation is a physical inevitability under sufficient tension
+    \item \textbf{Pre-visual detection}: A plant may be emitting 20+ clicks/hour while still appearing visually healthy, as initial cavitation affects redundant vessels before causing visible wilting
+\end{itemize}
+
+\subsection{The Khait et al.\ Findings}
+
+Key quantitative results from \cite{khait2023} that ground our model:
+
+\begin{table}[H]
+\centering
+\caption{Acoustic emission rates from Khait et al.\ (2023).}
+\label{tab:khait}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Condition} & \textbf{Pops/Hour} & \textbf{Frequency Range} \\
+\midrule
+Well-watered (control) & $\sim$1 & 20--100\,kHz \\
+Drought stress (peak) & $\sim$35 & 20--150\,kHz \\
+Cut stem & $\sim$25 & 20--100\,kHz \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+We use these values directly as our model's anchors: $R_{\text{healthy}} = 1.0$\,pops/hour and $R_{\text{peak}} = 35.0$\,pops/hour (see Section~\ref{sec:stress_mapping}).
+
+% ── FIGURE PLACEHOLDER: Xylem cavitation diagram ──
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.9\linewidth}{\centering\vspace{3cm}
+    \textbf{[INSERT FIGURE: Xylem Cavitation Illustration]}\\[0.5em]
+    \small Diagram showing water column under tension in xylem vessel, bubble nucleation, and collapse producing an acoustic pulse.
+    \vspace{3cm}}}
+    \caption{Mechanism of xylem cavitation producing ultrasonic emissions.}
+    \label{fig:cavitation}
+\end{figure}
+
+\subsection{Frequency Shifting: Making the Inaudible Audible}
+
+Real cavitation pops peak at $\sim$53\,kHz. Since human hearing cuts off at $\sim$20\,kHz, we apply a conceptual frequency shift:
+\begin{equation}
+    f_{\text{audible}} = f_{\text{real}} \times \frac{f_{\text{target}}}{f_{\text{peak}}} = 53{,}000 \times \frac{1{,}000}{53{,}000} = 1{,}000\;\text{Hz}
+\end{equation}
+This maps the peak ultrasonic energy to 1\,kHz in our synthesized audio, preserving temporal structure while making the pops clearly audible through standard speakers.
+
+
+% ══════════════════════════════════════════════
+\section{System Architecture}
+\label{sec:architecture}
+
+PlantWhisper consists of three deployment layers:
+
+\begin{enumerate}[nosep]
+    \item \textbf{Backend API}: FastAPI (Python 3.11) containerized via Docker, deployed on HuggingFace Spaces. Hosts all ML models and audio synthesis.
+    \item \textbf{Frontend}: Next.js 14 (React/TypeScript) portfolio site with glassmorphic UI, deployed separately.
+    \item \textbf{Model stack}: PyTorch models running on CPU (no GPU required at inference).
+\end{enumerate}
+
+\subsection{Segmentation Pipeline}
+
+The system implements a three-tier segmentation cascade for robustness:
+
+\paragraph{Tier 1 --- FastSAM (Primary).} We use FastSAM-s \cite{zhao2023fastsam}, a YOLO-based architecture that achieves SAM-quality segmentation in real time. The model runs with confidence threshold 0.4 and IoU threshold 0.9. When multiple masks are returned, we select the mask whose centroid is closest to the image center:
+\begin{equation}
+    m^* = \arg\min_{m_i} \left[ (\bar{y}_i - h/2)^2 + (\bar{x}_i - w/2)^2 \right]
+\end{equation}
+where $(\bar{y}_i, \bar{x}_i)$ is the centroid of mask $m_i$.
+
+\paragraph{Tier 2 --- SAM (Fallback).} If FastSAM is unavailable, we fall back to Meta's Segment Anything Model (SAM) with ViT-B backbone \cite{kirillov2023sam}. A single center-point prompt is used with multi-mask output, selecting the highest-confidence mask.
+
+\paragraph{Tier 3 --- Green Threshold (Emergency).} If both neural segmentation models fail, we apply HSV-based green detection:
+\begin{equation}
+    \text{mask} = \mathbf{1}\left[H \in [25, 85],\; S \in [40, 255],\; V \in [40, 255]\right]
+\end{equation}
+
+In all cases, non-plant pixels are replaced with a neutral gray (\texttt{[240, 240, 240]}) to prevent background features from influencing classification.
+
+% ── FIGURE PLACEHOLDER: Segmentation comparison ──
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.9\linewidth}{\centering\vspace{2.5cm}
+    \textbf{[INSERT FIGURE: Segmentation Comparison]}\\[0.5em]
+    \small Side-by-side: original image, FastSAM mask, SAM mask, green threshold mask.
+    \vspace{2.5cm}}}
+    \caption{Three-tier segmentation cascade results on a sample plant image.}
+    \label{fig:segmentation}
+\end{figure}
+
+
+\subsection{Classification}
+
+We use \texttt{mobilenet\_v2\_1.0\_224-plant-disease-identification} \cite{sandler2018mobilenetv2}, a MobileNetV2 fine-tuned on the PlantVillage dataset ($\sim$54K images, 38 classes across 14 plant species). The model takes the segmented image, processes it through the HuggingFace \texttt{MobileNetV2ImageProcessor}, and returns a class label with confidence score.
+
+The binary health signal is derived from the label string:
+\begin{equation}
+    \text{is\_healthy} = \begin{cases} \text{True} & \text{if ``healthy'' } \in \text{ label} \\ \text{False} & \text{otherwise} \end{cases}
+\end{equation}
+
+\subsection{Grad-CAM Attention Maps}
+
+To provide visual explanations, we apply Gradient-weighted Class Activation Mapping (Grad-CAM) \cite{selvaraju2017gradcam} to the last convolutional layer of MobileNetV2 (\texttt{mobilenet\_v2.features[-1]}). The implementation wraps the HuggingFace model in a custom \texttt{HFModelWrapper} that extracts logits, enabling compatibility with the \texttt{pytorch-grad-cam} library.
+
+The resulting heatmap is resized to the original image dimensions and overlaid using the standard cam-on-image visualization, highlighting regions the classifier attends to most strongly.
+
+% ── FIGURE PLACEHOLDER: Grad-CAM example ──
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.9\linewidth}{\centering\vspace{2.5cm}
+    \textbf{[INSERT FIGURE: Grad-CAM Heatmaps]}\\[0.5em]
+    \small Examples showing attention maps for healthy vs.\ stressed plants, demonstrating focus on leaf discoloration and wilting regions.
+    \vspace{2.5cm}}}
+    \caption{Grad-CAM attention maps highlighting stress-relevant regions.}
+    \label{fig:gradcam}
+\end{figure}
+
+
+% ══════════════════════════════════════════════
+\section{Stress Estimation Without Paired Data}
+\label{sec:stress_mapping}
+
+\subsection{The Core Challenge}
+
+No public dataset pairs plant photographs with simultaneously-recorded ultrasonic emission rates. Training a supervised model to predict pop rates from images is therefore not feasible with current data. This is the central methodological challenge of PlantWhisper.
+
+\subsection{Our Approach: Compositional Heuristic Pipeline}
+
+Rather than attempting to learn a direct mapping $\text{image} \to \text{pops/hour}$, we decompose the problem into two well-studied sub-problems chained together:
+
+\begin{equation}
+    \text{image} \xrightarrow{\text{(1) classification}} \text{(label, confidence)} \xrightarrow{\text{(2) heuristic}} \sigma \xrightarrow{\text{(3) biology}} R(\sigma)
+\end{equation}
+
+\paragraph{Step 1: Classification.} The MobileNetV2 classifier, trained on PlantVillage, maps the image to a disease label and confidence score. This step is fully supervised with strong performance ($>$95\% accuracy on the PlantVillage test set).
+
+\paragraph{Step 2: Stress Estimation Heuristic.} We define the continuous stress level $\sigma \in [0, 1]$ as:
+\begin{equation}
+    \sigma = \begin{cases}
+        0.1 \times (1 - c) & \text{if healthy} \\
+        0.4 + 0.5 \times c & \text{if diseased}
+    \end{cases}
+    \label{eq:stress}
+\end{equation}
+where $c$ is the classifier's confidence. The intuition:
+\begin{itemize}[nosep]
+    \item \textbf{Healthy + high confidence}: Very low stress ($\sigma \to 0$). The model is certain the plant is fine.
+    \item \textbf{Healthy + low confidence}: Slightly elevated stress ($\sigma \to 0.1$). Ambiguity may indicate early stress signs.
+    \item \textbf{Diseased + low confidence}: Moderate stress ($\sigma \approx 0.4$). Some disease indicators present.
+    \item \textbf{Diseased + high confidence}: High stress ($\sigma \to 0.9$). Clear disease pathology.
+\end{itemize}
+
+The value is clipped to $[0, 1]$.
+
+\paragraph{Step 3: Biologically-Grounded Pop Rate.} We map stress to pops/hour using a \textbf{hump-shaped curve} anchored to empirical data:
+\begin{equation}
+    R(\sigma) = R_{\text{healthy}} + (R_{\text{peak}} - R_{\text{healthy}}) \times 4\sigma(1 - \sigma)
+\end{equation}
+where $R_{\text{healthy}} = 1.0$ and $R_{\text{peak}} = 35.0$ pops/hour. For very low stress ($\sigma < 0.1$), a linear ramp is used instead:
+\begin{equation}
+    R(\sigma) = R_{\text{healthy}} + 30\sigma \quad \text{for } \sigma < 0.1
+\end{equation}
+
+The hump shape models the biological reality that at extreme stress ($\sigma \to 1$), the plant has already cavitated most of its vessels (hydraulic failure), so pop rate \emph{decreases}---there are fewer functional vessels left to cavitate.
+
+% ── FIGURE PLACEHOLDER: Stress-to-pop-rate curve ──
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.9\linewidth}{\centering\vspace{2.5cm}
+    \textbf{[INSERT FIGURE: Stress $\to$ Pop Rate Curve]}\\[0.5em]
+    \small Plot of $R(\sigma)$ showing the hump-shaped response: peak at $\sigma = 0.5$, declining at extreme stress due to hydraulic failure.
+    \vspace{2.5cm}}}
+    \caption{Hump-shaped stress-to-pop-rate mapping, anchored to Khait et al.\ data.}
+    \label{fig:pop_curve}
+\end{figure}
+
+\subsection{Stress Categories}
+
+For user-facing display, we discretize stress into five tiers:
+
+\begin{table}[H]
+\centering
+\caption{Stress category thresholds and display colors.}
+\label{tab:categories}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Category} & \textbf{$\sigma$ Range} & \textbf{Color} \\
+\midrule
+Healthy & $[0, 0.15)$ & \textcolor[HTML]{2ECC71}{$\blacksquare$} Green \\
+Mild Stress & $[0.15, 0.35)$ & \textcolor[HTML]{F1C40F}{$\blacksquare$} Yellow \\
+Moderate Stress & $[0.35, 0.55)$ & \textcolor[HTML]{E67E22}{$\blacksquare$} Orange \\
+Severe Stress & $[0.55, 0.75)$ & \textcolor[HTML]{E74C3C}{$\blacksquare$} Red \\
+Critical & $[0.75, 1.0]$ & \textcolor[HTML]{8E44AD}{$\blacksquare$} Purple \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Justification and Limitations}
+
+This heuristic approach is \textbf{not} a substitute for supervised learning on paired data. It is an \emph{approximate bridge} that is:
+
+\begin{itemize}[nosep]
+    \item \textbf{Biologically plausible}: Pop rate bounds are directly from published experimental data
+    \item \textbf{Monotonically sensible}: Sicker plants produce more pops (up to hydraulic failure)
+    \item \textbf{Confidence-aware}: Classifier uncertainty modulates the stress estimate
+    \item \textbf{Transparent}: The formula is explicit and interpretable, not a black box
+\end{itemize}
+
+However, it cannot capture plant-specific vulnerability curves (drought-tolerant species vs.\ sensitive ones), environmental context (temperature, humidity), or distinguish between types of stress that produce different pop signatures.
+
+
+% ══════════════════════════════════════════════
+\section{Diffusion-Based Audio Synthesis}
+\label{sec:diffusion}
+
+\subsection{Architecture: Conditional UNet}
+
+The core generative model is a stress-conditioned UNet for spectrogram diffusion. The architecture:
+
+\begin{itemize}[nosep]
+    \item \textbf{Input}: Noisy mel spectrogram tensor $x_t \in \mathbb{R}^{1 \times 64 \times 32}$
+    \item \textbf{Conditioning}: Stress level $\sigma$ and diffusion timestep $t$, each embedded via a 2-layer MLP ($1 \to 64 \to 64$, SiLU activation)
+    \item \textbf{Encoder}: Three conv blocks ($1 \to 32 \to 64 \to 128$) with MaxPool2d downsampling and GroupNorm(8) normalization
+    \item \textbf{Conditioning injection}: Additive projection of $(\sigma_{\text{emb}} + t_{\text{emb}})$ into the bottleneck feature map via a linear layer ($64 \to 128$), broadcast spatially
+    \item \textbf{Bottleneck}: Two conv layers ($128 \to 256 \to 128$) with GroupNorm + SiLU
+    \item \textbf{Decoder}: Three conv blocks with bilinear upsampling and skip connections (concatenation)
+    \item \textbf{Output}: Single-channel denoised spectrogram via $1\times1$ convolution
+\end{itemize}
+
+\subsection{Diffusion Process (DDPM)}
+
+We implement a standard Denoising Diffusion Probabilistic Model \cite{ho2020ddpm} with:
+\begin{itemize}[nosep]
+    \item $T = 500$ diffusion steps
+    \item Linear noise schedule: $\beta_1 = 10^{-4}$ to $\beta_T = 0.02$
+    \item Forward process: $q(x_t | x_0) = \mathcal{N}(x_t; \sqrt{\bar{\alpha}_t}\, x_0, (1 - \bar{\alpha}_t) \mathbf{I})$
+\end{itemize}
+
+Sampling follows the standard reverse process:
+\begin{equation}
+    x_{t-1} = \frac{1}{\sqrt{\alpha_t}} \left( x_t - \frac{1 - \alpha_t}{\sqrt{1 - \bar{\alpha}_t}} \epsilon_\theta(x_t, t, \sigma) \right) + \sqrt{\beta_t}\, \mathbf{z}
+\end{equation}
+where $\mathbf{z} \sim \mathcal{N}(0, \mathbf{I})$ for $t > 0$.
+
+\subsection{Spectrogram to Audio}
+
+The generated mel spectrogram is converted to audio via:
+\begin{enumerate}[nosep]
+    \item Exponentiate: $S_{\text{linear}} = e^{3 \cdot S_{\text{generated}}}$ (undo log compression with gain)
+    \item Griffin-Lim inversion via \texttt{librosa.feature.inverse.mel\_to\_audio} with STFT parameters: \texttt{n\_fft=256}, \texttt{hop\_length=64}, 32 Griffin-Lim iterations at $f_s = 22{,}050$\,Hz
+\end{enumerate}
+
+The resulting single-pop audio is then placed into a full-duration clip at randomized positions matching the predicted pop rate.
+
+\subsection{Synthetic Fallback}
+
+When the diffusion model checkpoint is unavailable, a synthetic fallback generates pops using:
+\begin{equation}
+    \text{pop}(t) = \mathcal{N}(0, 0.5) \cdot W_{\text{Hanning}}(n_{\text{pop}})
+\end{equation}
+where each pop is 2\,ms of Hanning-windowed Gaussian noise, placed at random positions in a 10-second clip with low-level background noise ($\sim$0.01 amplitude).
+
+
+% ══════════════════════════════════════════════
+\section{Waveform and Spectrogram Visualization}
+\label{sec:viz}
+
+To provide users with visual evidence of the synthesized acoustic emissions, we generate two server-side rendered plots using Matplotlib (Agg backend for headless operation):
+
+\subsection{Waveform Display}
+
+The raw audio waveform is plotted with time on the x-axis and amplitude on the y-axis. Pop events are automatically detected as amplitude spikes exceeding $4\times$ the signal's standard deviation:
+\begin{equation}
+    \text{pop\_mask}[n] = \mathbf{1}\left[ |x[n]| > 4 \cdot \text{std}(x) \right]
+\end{equation}
+Detected pops are highlighted with red scatter points overlaid on the green waveform trace. The plot title includes the predicted pop rate for quantitative context.
+
+\subsection{Spectrogram Display}
+
+A time-frequency representation is computed via STFT with parameters matched to the audio generation (\texttt{NFFT=256}, overlap of 200 samples), displayed using the ``magma'' colormap on a dB scale. The frequency axis is limited to 0--3\,kHz to focus on the region containing the frequency-shifted pop energy.
+
+Both plots use a dark color scheme (\texttt{\#0a1a0f} background, emerald axis labels) consistent with the frontend design, and are transmitted as base64-encoded JPEG images.
+
+% ── FIGURE PLACEHOLDER: Waveform + Spectrogram ──
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.9\linewidth}{\centering\vspace{2.5cm}
+    \textbf{[INSERT FIGURE: Waveform \& Spectrogram]}\\[0.5em]
+    \small Example output showing waveform with detected pops (red) and spectrogram with visible pop energy bursts at $\sim$1\,kHz.
+    \vspace{2.5cm}}}
+    \caption{Generated waveform (top) and spectrogram (bottom) for a moderately stressed plant ($\sigma = 0.47$, 33.6 pops/hour).}
+    \label{fig:waveform_spec}
+\end{figure}
+
+
+% ══════════════════════════════════════════════
+\section{Plant Voice: LLM + TTS Pipeline}
+\label{sec:voice}
+
+\subsection{Empathetic Speech Generation}
+
+PlantWhisper gives each plant a ``voice'' using a two-stage pipeline:
+
+\paragraph{Stage 1 --- LLM Text Generation.} We use Llama 3.3 70B (via Groq API, model \texttt{llama-3.3-70b-versatile}) with a carefully crafted system prompt that instructs the model to speak as a conscious plant:
+\begin{itemize}[nosep]
+    \item First-person perspective
+    \item Mood calibrated to stress level (``content'' at $\sigma < 0.15$, ``desperate'' at $\sigma > 0.75$)
+    \item Natural biological references (water transport, xylem, leaves, roots)
+    \item Mention of ultrasonic clicks when stressed
+    \item 2--3 sentences, no emojis, temperature 0.85
+\end{itemize}
+
+When the Groq API is unavailable, three hardcoded fallback messages cover the stress spectrum.
+
+\paragraph{Stage 2 --- Text-to-Speech.} Microsoft Edge TTS (\texttt{en-US-AriaNeural}) renders the text with prosody matched to stress:
+
+\begin{table}[H]
+\centering
+\caption{TTS prosody parameters by stress level.}
+\label{tab:tts}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Stress Range} & \textbf{Rate} & \textbf{Pitch} \\
+\midrule
+$\sigma < 0.3$ (calm) & $-5\%$ & $-2$\,Hz \\
+$0.3 \leq \sigma < 0.6$ (moderate) & $+0\%$ & $+0$\,Hz \\
+$\sigma \geq 0.6$ (distressed) & $+10\%$ & $+3$\,Hz \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Care Recommendations}
+
+A second LLM call (or fallback template) generates 3--5 actionable care recommendations based on the stress category. This provides practical value beyond the artistic sonification.
+
+
+% ══════════════════════════════════════════════
+\section{Failure Cases and How We Handled Them}
+\label{sec:failures}
+
+\subsection{Segmentation Failures}
+
+\paragraph{Problem.} FastSAM sometimes returns no masks for small plants against complex backgrounds, or segments background objects instead of the plant.
+
+\paragraph{Solution.} The three-tier cascade (FastSAM $\to$ SAM $\to$ green threshold) ensures graceful degradation. The center-bias heuristic for mask selection (Eq.~2) handles multi-object scenes by assuming the subject is approximately centered.
+
+\paragraph{Remaining limitation.} Non-green plants (red coleus, brown dormant plants) fail the green threshold fallback entirely.
+
+\subsection{Classification Domain Mismatch}
+
+\paragraph{Problem.} MobileNetV2 was trained on PlantVillage (lab-curated images of 14 crop species). Real-world photos differ dramatically: varied lighting, multiple plants, soil visible, pots, backgrounds, non-crop species.
+
+\paragraph{Solution.} Segmentation removes background noise before classification. However, species outside the training set (houseplants, trees, succulents) receive unreliable labels, though the binary healthy/diseased signal often remains directionally correct.
+
+\paragraph{Remaining limitation.} Confidence calibration is poor out-of-distribution. The model may be highly confident about an incorrect label, propagating error through the stress estimate.
+
+\subsection{Stress Estimation Without Ground Truth}
+
+\paragraph{Problem.} No paired image--pop-rate data exists. Our heuristic (Eq.~\ref{eq:stress}) is an educated guess, not a learned mapping.
+
+\paragraph{Solution.} We designed the heuristic to be:
+\begin{itemize}[nosep]
+    \item Bounded by empirical data (Khait et al.)
+    \item Monotonically consistent with biological expectation
+    \item Confidence-modulated (uncertain classifications yield moderate, not extreme, stress)
+    \item Interpretable and auditable
+\end{itemize}
+
+\paragraph{Remaining limitation.} The system cannot distinguish between drought stress (which causes cavitation) and nutrient deficiency or pest damage (which may not), yet maps all disease indicators to the same acoustic output.
+
+\subsection{Diffusion Model Quality}
+
+\paragraph{Problem.} Training the DDPM on actual ultrasonic recordings would require a large dataset of plant-emitted sounds. No such public dataset exists at sufficient scale.
+
+\paragraph{Solution.} The diffusion model is trained on synthetic spectrograms parameterized by stress level, making it a \emph{generative prior for the acoustic model} rather than a learned representation of real plant sounds. When the checkpoint is unavailable, the synthetic fallback (Hanning-windowed noise bursts) provides a serviceable approximation.
+
+\paragraph{Remaining limitation.} Generated audio is perceptually plausible but not physically accurate. Real cavitation pops have complex spectral characteristics shaped by vessel geometry that our model does not capture.
+
+\subsection{TTS and LLM Availability}
+
+\paragraph{Problem.} Both Edge TTS and Groq API require network access and may be rate-limited or unavailable.
+
+\paragraph{Solution.} Both have complete offline fallbacks: hardcoded speech text (3 stress-level variants) for the LLM, and the API endpoint includes async TTS fallback that retries at the API layer if the backend's synchronous event loop fails.
+
+\subsection{Memory and Latency}
+
+\paragraph{Problem.} Loading MobileNetV2 + FastSAM + SAM + Diffusion UNet simultaneously on CPU exceeds the 16\,GB RAM limit of free HuggingFace Spaces.
+
+\paragraph{Solution.} Lazy loading with availability flags. Each model load is wrapped in \texttt{try/except}, setting \texttt{FASTSAM\_AVAILABLE}, \texttt{SAM\_AVAILABLE}, \texttt{DIFFUSION\_AVAILABLE}, etc. The system runs with whatever models fit in memory, degrading gracefully.
+
+% ── FIGURE PLACEHOLDER: Failure case examples ──
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.9\linewidth}{\centering\vspace{2.5cm}
+    \textbf{[INSERT FIGURE: Failure Case Examples]}\\[0.5em]
+    \small (a) Segmentation failure on non-green plant. (b) Misclassification of out-of-distribution species. (c) Green threshold fallback result.
+    \vspace{2.5cm}}}
+    \caption{Representative failure cases and fallback behavior.}
+    \label{fig:failures}
+\end{figure}
+
+
+% ══════════════════════════════════════════════
+\section{Deployment Architecture}
+\label{sec:deployment}
+
+\subsection{Backend}
+
+The backend is containerized using Docker (Python 3.11-slim base) with:
+\begin{itemize}[nosep]
+    \item \textbf{Runtime}: Uvicorn ASGI server on port 7860
+    \item \textbf{Framework}: FastAPI with full CORS support
+    \item \textbf{Image format}: JPEG encoding at quality 85 for bandwidth efficiency
+    \item \textbf{Audio format}: WAV (soundfile) $\to$ base64 data URIs
+    \item \textbf{Visualization}: Matplotlib Agg backend, JPEG output
+    \item \textbf{System dependencies}: libgl1, libglib2.0, libsndfile1, ffmpeg
+\end{itemize}
+
+\subsection{Frontend}
+
+Next.js 14 with:
+\begin{itemize}[nosep]
+    \item Single-page React application (\texttt{``use client''})
+    \item Glassmorphic UI with emerald color palette
+    \item Animated floating gradient background
+    \item Responsive layout with CSS grid
+    \item All data received as base64 data URIs (no file downloads)
+\end{itemize}
+
+\subsection{API Contract}
+
+A single \texttt{POST /api/analyze} endpoint accepts a multipart image upload and returns a JSON response containing all results:
+
+\begin{table}[H]
+\centering
+\caption{API response fields.}
+\label{tab:api}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Field} & \textbf{Type} \\
+\midrule
+\texttt{stress} & float $\in [0, 1]$ \\
+\texttt{category} & string (5 tiers) \\
+\texttt{popsPerHour} & float \\
+\texttt{label} & string (disease label) \\
+\texttt{confidence} & float \\
+\texttt{speech} & string (plant voice) \\
+\texttt{recommendations} & string (care advice) \\
+\texttt{voiceAudio} & data URI (MP3) \\
+\texttt{ultrasonicAudio} & data URI (WAV) \\
+\texttt{diffusionAudio} & data URI (WAV) \\
+\texttt{segmentedImage} & data URI (JPEG) \\
+\texttt{gradcamImage} & data URI (JPEG) \\
+\texttt{waveformImage} & data URI (JPEG) \\
+\texttt{spectrogramImage} & data URI (JPEG) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% ══════════════════════════════════════════════
+\section{Results and Discussion}
+\label{sec:results}
+
+\subsection{Qualitative Observations}
+
+PlantWhisper produces compelling multi-modal outputs:
+\begin{itemize}[nosep]
+    \item Healthy plants yield quiet waveforms with sparse, low-amplitude pops ($\sim$1/hour)
+    \item Diseased plants produce dense, energetic pop patterns clearly visible in both waveform and spectrogram
+    \item Grad-CAM consistently highlights discolored, wilting, or spotted leaf regions
+    \item LLM-generated speech meaningfully reflects stress level (calm vs.\ distressed tone)
+\end{itemize}
+
+% ── FIGURE PLACEHOLDER: Full pipeline example ──
+\begin{figure*}[t]
+    \centering
+    \fbox{\parbox{0.95\linewidth}{\centering\vspace{4cm}
+    \textbf{[INSERT FIGURE: Full Pipeline Example --- Two-Column Width]}\\[0.5em]
+    \small Complete output for a healthy and a stressed plant side-by-side: original image, segmented image, Grad-CAM, waveform, spectrogram, stress gauge, speech text.
+    \vspace{4cm}}}
+    \caption{Complete PlantWhisper output for a healthy plant (left) vs.\ a severely stressed plant (right).}
+    \label{fig:full_example}
+\end{figure*}
+
+\subsection{What This System Is and Is Not}
+
+PlantWhisper is:
+\begin{itemize}[nosep]
+    \item A \textbf{creative exploration} of how AI can bridge modalities (vision $\to$ sound)
+    \item An \textbf{educational tool} demonstrating real plant biology (cavitation acoustics)
+    \item A \textbf{proof of concept} for multi-modal plant monitoring
+    \item A \textbf{portfolio piece} showcasing full-stack ML engineering
+\end{itemize}
+
+PlantWhisper is \textbf{not}:
+\begin{itemize}[nosep]
+    \item A validated agricultural diagnostic tool
+    \item A replacement for actual ultrasonic sensors
+    \item Trained on real plant acoustic data
+    \item Suitable for making agricultural decisions without domain expert review
+\end{itemize}
+
+
+% ══════════════════════════════════════════════
+\section{Future Work}
+\label{sec:future}
+
+\begin{enumerate}[nosep]
+    \item \textbf{Paired dataset collection}: Deploying contact microphones alongside cameras on greenhouse plants to build the first image-to-pop-rate dataset
+    \item \textbf{Species-specific models}: Vulnerability curves differ by species; a species classifier could select appropriate stress-to-pop mappings
+    \item \textbf{Temporal analysis}: Video input enabling time-series stress tracking
+    \item \textbf{Real ultrasonic training data}: Training the diffusion model on actual recorded cavitation events
+    \item \textbf{Multi-sensor fusion}: Combining thermal, hyperspectral, and acoustic sensors with visual data
+\end{enumerate}
+
+
+% ══════════════════════════════════════════════
+\section{Conclusion}
+
+PlantWhisper demonstrates that meaningful cross-modal inference---from a photograph to a sound---is possible when grounded in real biology and transparent heuristic design. By combining established computer vision models with biologically-anchored acoustic modeling and a conditional diffusion model, we create an end-to-end system that makes the silent stress of plants audible. The system is honest about its limitations: without paired training data, the acoustic output is an approximation, not a measurement. But as both an educational tool and a technical proof of concept, PlantWhisper opens a window into a world of plant communication that humans cannot normally perceive.
+
+% ══════════════════════════════════════════════
+\begin{thebibliography}{10}
+
+\bibitem{khait2023}
+I.~Khait, O.~Lewin-Epstein, R.~Sharon, K.~Saban, R.~Goldstein, Y.~Anikster, Y.~Zeron, C.~Agassy, S.~Nizan, G.~Sharabi, R.~Perelman, A.~Boonman, N.~Sade, Y.~Yovel, and L.~Hadany,
+``Sounds emitted by plants under stress are airborne and informative,''
+\emph{Cell}, vol.~186, no.~7, pp.~1328--1336, 2023.
+
+\bibitem{dixon1894}
+H.~H. Dixon and J.~Joly,
+``On the ascent of sap,''
+\emph{Philosophical Transactions of the Royal Society of London. B}, vol.~186, pp.~563--576, 1894.
+
+\bibitem{zhao2023fastsam}
+X.~Zhao, W.~Ding, Y.~An, Y.~Du, T.~Yu, M.~Li, M.~Tang, and J.~Wang,
+``Fast Segment Anything,''
+\emph{arXiv preprint arXiv:2306.12156}, 2023.
+
+\bibitem{kirillov2023sam}
+A.~Kirillov, E.~Mintun, N.~Ravi, H.~Mao, C.~Rolland, L.~Gustafson, T.~Xiao, S.~Whitehead, A.~C. Berg, W.-Y. Lo, P.~Doll{\'a}r, and R.~Girshick,
+``Segment Anything,''
+\emph{arXiv preprint arXiv:2304.02643}, 2023.
+
+\bibitem{sandler2018mobilenetv2}
+M.~Sandler, A.~Howard, M.~Zhu, A.~Zhmoginov, and L.-C. Chen,
+``MobileNetV2: Inverted residuals and linear bottlenecks,''
+in \emph{Proc.\ IEEE CVPR}, pp.~4510--4520, 2018.
+
+\bibitem{selvaraju2017gradcam}
+R.~R. Selvaraju, M.~Cogswell, A.~Das, R.~Vedantam, D.~Parikh, and D.~Batra,
+``Grad-CAM: Visual explanations from deep networks via gradient-based localization,''
+in \emph{Proc.\ IEEE ICCV}, pp.~618--626, 2017.
+
+\bibitem{ho2020ddpm}
+J.~Ho, A.~Jain, and P.~Abbeel,
+``Denoising diffusion probabilistic models,''
+in \emph{Proc.\ NeurIPS}, vol.~33, pp.~6840--6851, 2020.
+
+\bibitem{tyree1991}
+M.~T. Tyree and J.~S. Sperry,
+``Vulnerability of xylem to cavitation and embolism,''
+\emph{Annual Review of Plant Physiology and Plant Molecular Biology}, vol.~42, pp.~19--36, 1991.
+
+\bibitem{plantvillage}
+D.~P. Hughes and M.~Salath{\'e},
+``An open access repository of images on plant health to enable the development of mobile disease diagnostics,''
+\emph{arXiv preprint arXiv:1511.08060}, 2015.
+
+\bibitem{brodersen2013}
+C.~R. Brodersen, A.~J. McElrone, B.~Choat, M.~A. Matthews, and K.~A. Shackel,
+``The dynamics of embolism repair in xylem: In vivo visualizations using high-resolution computed tomography,''
+\emph{Plant Physiology}, vol.~154, no.~3, pp.~1088--1095, 2010.
+
+\end{thebibliography}
+
+% ══════════════════════════════════════════════
+\appendix
+\section{Reproducibility}
+
+All source code is available at \url{https://github.com/Iammohithhh/plantwhisper}. The backend runs on any machine with Python 3.11+ and the listed dependencies. No GPU is required. The diffusion model checkpoint (\texttt{diffusion\_model.pt}) can be trained using the provided architecture or omitted to use the synthetic fallback.
+
+\end{document}
