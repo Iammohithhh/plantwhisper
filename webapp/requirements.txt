@@ -10,5 +10,5 @@ scipy
 soundfile
 edge-tts
 groq
-pytorch-grad-cam
+grad-cam
 nest-asyncio
