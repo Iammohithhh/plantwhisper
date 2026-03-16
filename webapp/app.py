@@ -146,6 +146,108 @@ try:
 except:
     AUDIO_AVAILABLE = False
 
+# --- Diffusion Model for Acoustic Synthesis ---
+# Generates spectrograms conditioned on stress level → Griffin-Lim → audio
+# Falls back to synthetic pops if checkpoint not available
+
+class ConditionalUNet(nn.Module):
+    """UNet for spectrogram diffusion, conditioned on stress level."""
+
+    def __init__(self, in_channels=1, out_channels=1, stress_embed_dim=64):
+        super().__init__()
+        self.stress_embed = nn.Sequential(
+            nn.Linear(1, stress_embed_dim), nn.SiLU(),
+            nn.Linear(stress_embed_dim, stress_embed_dim))
+        self.time_embed = nn.Sequential(
+            nn.Linear(1, stress_embed_dim), nn.SiLU(),
+            nn.Linear(stress_embed_dim, stress_embed_dim))
+        self.enc1 = self._conv_block(in_channels, 32)
+        self.enc2 = self._conv_block(32, 64)
+        self.enc3 = self._conv_block(64, 128)
+        self.cond_proj = nn.Linear(stress_embed_dim, 128)
+        self.bottleneck = nn.Sequential(
+            nn.Conv2d(128, 256, 3, padding=1), nn.GroupNorm(8, 256), nn.SiLU(),
+            nn.Conv2d(256, 128, 3, padding=1), nn.GroupNorm(8, 128), nn.SiLU())
+        self.dec3 = self._conv_block(256, 64)
+        self.dec2 = self._conv_block(128, 32)
+        self.dec1 = self._conv_block(64, 32)
+        self.out = nn.Conv2d(32, out_channels, 1)
+        self.pool = nn.MaxPool2d(2)
+
+    def _conv_block(self, in_ch, out_ch):
+        return nn.Sequential(
+            nn.Conv2d(in_ch, out_ch, 3, padding=1), nn.GroupNorm(8, out_ch), nn.SiLU(),
+            nn.Conv2d(out_ch, out_ch, 3, padding=1), nn.GroupNorm(8, out_ch), nn.SiLU())
+
+    def forward(self, x, t, stress_level):
+        stress_emb = self.stress_embed(stress_level.unsqueeze(-1))
+        time_emb = self.time_embed(t.unsqueeze(-1))
+        cond = stress_emb + time_emb
+        e1 = self.enc1(x)
+        e2 = self.enc2(self.pool(e1))
+        e3 = self.enc3(self.pool(e2))
+        e3_cond = e3 + self.cond_proj(cond).unsqueeze(-1).unsqueeze(-1)
+        b = self.bottleneck(e3_cond)
+        b_up = F.interpolate(b, size=e3.shape[2:], mode='bilinear', align_corners=True)
+        d3 = self.dec3(torch.cat([b_up, e3], dim=1))
+        d3_up = F.interpolate(d3, size=e2.shape[2:], mode='bilinear', align_corners=True)
+        d2 = self.dec2(torch.cat([d3_up, e2], dim=1))
+        d2_up = F.interpolate(d2, size=e1.shape[2:], mode='bilinear', align_corners=True)
+        d1 = self.dec1(torch.cat([d2_up, e1], dim=1))
+        return self.out(d1)
+
+
+class SimpleDiffusion:
+    """DDPM diffusion process for spectrogram generation."""
+
+    def __init__(self, n_steps=500, beta_start=1e-4, beta_end=0.02, device='cpu'):
+        self.n_steps = n_steps
+        self.device = device
+        self.betas = torch.linspace(beta_start, beta_end, n_steps, device=device)
+        self.alphas = 1.0 - self.betas
+        self.alpha_cumprod = torch.cumprod(self.alphas, dim=0)
+
+    def add_noise(self, x, t):
+        sqrt_alpha = self.alpha_cumprod[t].sqrt().view(-1, 1, 1, 1)
+        sqrt_one_minus = (1.0 - self.alpha_cumprod[t]).sqrt().view(-1, 1, 1, 1)
+        noise = torch.randn_like(x)
+        return sqrt_alpha * x + sqrt_one_minus * noise, noise
+
+    @torch.no_grad()
+    def sample(self, model, shape, stress_level):
+        model.eval()
+        x = torch.randn(shape, device=self.device)
+        stress_t = torch.tensor([stress_level], device=self.device).float()
+        for i in reversed(range(self.n_steps)):
+            t = torch.tensor([i / self.n_steps], device=self.device).float()
+            pred_noise = model(x, t, stress_t)
+            alpha = self.alphas[i]
+            alpha_cum = self.alpha_cumprod[i]
+            x = (x - (1 - alpha) / (1 - alpha_cum).sqrt() * pred_noise) / alpha.sqrt()
+            if i > 0:
+                x += self.betas[i].sqrt() * torch.randn_like(x)
+        return x
+
+
+DIFFUSION_AVAILABLE = False
+diffusion_model = None
+diffusion_process = None
+
+DIFFUSION_CHECKPOINT = os.environ.get("DIFFUSION_CHECKPOINT", "diffusion_model.pt")
+print("Loading diffusion model...")
+try:
+    if os.path.exists(DIFFUSION_CHECKPOINT):
+        diffusion_model = ConditionalUNet().to(device)
+        diffusion_model.load_state_dict(torch.load(DIFFUSION_CHECKPOINT, map_location=device))
+        diffusion_model.eval()
+        diffusion_process = SimpleDiffusion(n_steps=500, device=device)
+        DIFFUSION_AVAILABLE = True
+        print("✓ Diffusion model loaded")
+    else:
+        print(f"⚠ Diffusion checkpoint not found ({DIFFUSION_CHECKPOINT}) - using synthetic pops")
+except Exception as e:
+    print(f"⚠ Diffusion model failed to load: {e}")
+
 print("\n🌱 PlantWhisper ready!\n")
 
 # ============================================
@@ -498,15 +600,70 @@ def generate_ultrasonic_audio(stress_level: float, duration: int = 10) -> str:
         return None
 
 
+def generate_diffusion_audio(stress_level: float, duration: int = 10) -> str:
+    """Generate ultrasonic audio using the diffusion model.
+
+    Generates a spectrogram conditioned on stress_level, converts it to a
+    single pop via Griffin-Lim, then tiles pops across the clip duration.
+    Returns path to wav file, or None on failure.
+    """
+    if not DIFFUSION_AVAILABLE or diffusion_model is None:
+        return None
+
+    try:
+        import librosa
+
+        # Generate spectrogram (64 mel bins x 32 time frames)
+        spec_tensor = diffusion_process.sample(
+            diffusion_model, shape=(1, 1, 64, 32), stress_level=stress_level)
+        spec = spec_tensor.squeeze().cpu().numpy()
+
+        # Denormalize (reverse training normalization)
+        spec = spec * 3
+        spec = np.exp(spec)
+
+        # Griffin-Lim → single pop waveform
+        pop_audio = librosa.feature.inverse.mel_to_audio(
+            spec, sr=TARGET_SR, n_fft=256, hop_length=64, n_iter=32)
+
+        # Tile pops across full duration based on stress-derived rate
+        pops_per_hour = stress_to_pop_rate(stress_level)
+        n_pops = max(1, int(pops_per_hour * (duration / 3600) * 60))
+        total_samples = duration * TARGET_SR
+        full_audio = np.random.randn(total_samples) * 0.001  # subtle background
+
+        pop_times = np.sort(np.random.uniform(0.2, duration - 0.2, n_pops))
+        for t in pop_times:
+            start = int(t * TARGET_SR)
+            end = min(start + len(pop_audio), total_samples)
+            length = end - start
+            if length > 0:
+                full_audio[start:end] += pop_audio[:length] * np.random.uniform(0.7, 1.0)
+
+        # Normalize
+        peak = np.abs(full_audio).max()
+        if peak > 0:
+            full_audio = full_audio * 0.8 / peak
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        output_path = tmp.name
+        tmp.close()
+        sf.write(output_path, full_audio.astype(np.float32), TARGET_SR)
+        return output_path
+    except Exception as e:
+        print(f"Diffusion audio error: {e}")
+        return None
+
+
 # ============================================
 # MAIN ANALYSIS FUNCTION
 # ============================================
 
-def analyze_plant(image: np.ndarray):
+def analyze_plant(image: np.ndarray, use_diffusion: bool = True):
     """Main analysis pipeline."""
-    
+
     if image is None:
-        return None, None, "Please upload an image", "", "", None, None
+        return None, None, "Please upload an image", "", "", None, None, None
     
     # Ensure RGB
     if len(image.shape) == 2:
@@ -537,8 +694,18 @@ def analyze_plant(image: np.ndarray):
     # 7. Generate audio
     voice_audio = generate_voice_audio(speech_text, stress_level)
     ultrasonic_audio = generate_ultrasonic_audio(stress_level)
-    
+
+    # 8. Diffusion-generated audio (if available and requested)
+    diffusion_audio = None
+    diffusion_label = "Not available"
+    if use_diffusion and DIFFUSION_AVAILABLE:
+        diffusion_audio = generate_diffusion_audio(stress_level)
+        diffusion_label = "Diffusion model" if diffusion_audio else "Generation failed"
+    elif not DIFFUSION_AVAILABLE:
+        diffusion_label = "No checkpoint loaded"
+
     # Format results
+    audio_method = "Diffusion" if (diffusion_audio and use_diffusion) else "Synthetic"
     status_text = f"""## 🌱 Plant Analysis Results
 
 ### Stress Level: {stress_level:.0%} ({category})
@@ -549,13 +716,14 @@ def analyze_plant(image: np.ndarray):
 | Classification | {classification['label']} |
 | Confidence | {classification['confidence']:.1%} |
 | Ultrasonic Clicks | {pops_per_hour:.1f} per hour |
+| Audio Method | {audio_method} |
 
 ---
 
 ### 🗣️ Plant Says:
 > *"{speech_text}"*
 """
-    
+
     return (
         segmented,
         gradcam_img,
@@ -563,7 +731,8 @@ def analyze_plant(image: np.ndarray):
         recommendations,
         f'"{speech_text}"',
         voice_audio,
-        ultrasonic_audio
+        ultrasonic_audio,
+        diffusion_audio,
     )
 
 
@@ -614,7 +783,13 @@ with gr.Blocks(css=css, title="🌱 PlantWhisper") as demo:
                 variant="primary",
                 size="lg"
             )
-            
+            use_diffusion = gr.Checkbox(
+                label="Use Diffusion Model for audio",
+                value=DIFFUSION_AVAILABLE,
+                interactive=True,
+                info="Generate ultrasonic pops via trained diffusion model (requires checkpoint)"
+            )
+
             gr.Markdown("""
             ---
             **Tips for best results:**
@@ -660,13 +835,19 @@ with gr.Blocks(css=css, title="🌱 PlantWhisper") as demo:
         
         with gr.Column(scale=1):
             output_ultrasonic = gr.Audio(
-                label="🔊 Ultrasonic Emissions (Pitch-shifted)",
+                label="🔊 Ultrasonic Emissions (Synthetic)",
+                type="filepath"
+            )
+            output_diffusion = gr.Audio(
+                label="🧬 Ultrasonic Emissions (Diffusion-Generated)",
                 type="filepath"
             )
             gr.Markdown("""
-            *The clicks you hear are pitch-shifted representations of 
-            ultrasonic emissions plants make when stressed (based on 
-            [Tel Aviv University research](https://www.cell.com/cell/fulltext/S0092-8674(23)00262-3)).*
+            *The clicks you hear are pitch-shifted representations of
+            ultrasonic emissions plants make when stressed (based on
+            [Tel Aviv University research](https://www.cell.com/cell/fulltext/S0092-8674(23)00262-3)).
+            When a diffusion checkpoint is loaded, the second player uses a
+            trained model to generate realistic spectrogram-based pops.*
             """)
     
     gr.Markdown("""
@@ -675,12 +856,13 @@ with gr.Blocks(css=css, title="🌱 PlantWhisper") as demo:
     ### About PlantWhisper
     
     PlantWhisper uses computer vision and AI to analyze plant health:
-    
-    1. **SAM Segmentation** - Isolates the plant from background
+
+    1. **SAM / FastSAM Segmentation** - Isolates the plant from background
     2. **MobileNetV2 Classifier** - Detects health status
     3. **Grad-CAM** - Shows where the AI is looking
     4. **Stress Modeling** - Based on plant acoustics research
-    5. **LLM + TTS** - Gives your plant a voice
+    5. **Conditional Diffusion** - Generates realistic ultrasonic pop spectrograms
+    6. **LLM + TTS** - Gives your plant a voice
     
     *Created by Mohith | IIT Bombay | 2026*
     """)
@@ -688,7 +870,7 @@ with gr.Blocks(css=css, title="🌱 PlantWhisper") as demo:
     # Connect button
     analyze_btn.click(
         fn=analyze_plant,
-        inputs=[input_image],
+        inputs=[input_image, use_diffusion],
         outputs=[
             output_segmented,
             output_gradcam,
@@ -696,10 +878,11 @@ with gr.Blocks(css=css, title="🌱 PlantWhisper") as demo:
             output_recommendations,
             output_speech,
             output_voice,
-            output_ultrasonic
+            output_ultrasonic,
+            output_diffusion,
         ]
     )
-    
+
     # Examples — use assets from repo (parent dir on HF Spaces, sibling locally)
     _examples_dir = Path(__file__).parent.parent / "assets"
     _example_files = [
@@ -717,7 +900,8 @@ with gr.Blocks(css=css, title="🌱 PlantWhisper") as demo:
                 output_recommendations,
                 output_speech,
                 output_voice,
-                output_ultrasonic
+                output_ultrasonic,
+                output_diffusion,
             ],
             fn=analyze_plant,
             cache_examples=False

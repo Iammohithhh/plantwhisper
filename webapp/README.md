@@ -4,7 +4,7 @@ emoji: 🌱
 colorFrom: green
 colorTo: yellow
 sdk: gradio
-sdk_version: 4.44.0
+sdk_version: 5.12.0
 app_file: app.py
 pinned: false
 license: mit
@@ -22,10 +22,11 @@ PlantWhisper is a multimodal AI system that analyzes plant photos to:
 
 ## Features
 
-- **SAM Segmentation** - Isolates plant from background
+- **FastSAM / SAM Segmentation** - Isolates plant from background
 - **MobileNetV2 Classifier** - Detects health status with 95%+ accuracy
 - **Grad-CAM Explainability** - Shows where the AI is focusing
 - **Stress Modeling** - Based on Tel Aviv University plant acoustics research
+- **Conditional Diffusion** - Generates realistic ultrasonic pop spectrograms from stress level
 - **Care Recommendations** - AI-generated actionable advice
 - **Plant Persona** - LLM-generated speech + text-to-speech
 
@@ -44,7 +45,8 @@ Plants emit ultrasonic clicks (20-150 kHz) when stressed through xylem cavitatio
 
 ## Environment Variables
 
-Set `GROQ_API_KEY` in HuggingFace Spaces secrets for LLM features.
+- `GROQ_API_KEY` - Set in HuggingFace Spaces secrets for LLM features
+- `DIFFUSION_CHECKPOINT` - Path to trained diffusion model weights (default: `diffusion_model.pt`)
 
 ## Created By
 
