@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+python-multipart
+torch
+torchvision
+transformers
+Pillow
+numpy
+opencv-python-headless
+scipy
+soundfile
+librosa
+edge-tts
+groq
+pytorch-grad-cam
+ultralytics
