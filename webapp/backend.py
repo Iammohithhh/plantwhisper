@@ -12,14 +12,12 @@ from PIL import Image
 import cv2
 from pathlib import Path
 import asyncio
-import nest_asyncio
 import random
 import tempfile
 import os
 import warnings
 
 warnings.filterwarnings('ignore')
-nest_asyncio.apply()
 
 # ============================================
 # CONFIGURATION
@@ -232,9 +230,11 @@ print("Loading diffusion model...")
 try:
     if os.path.exists(DIFFUSION_CHECKPOINT):
         diffusion_model = ConditionalUNet().to(device)
-        diffusion_model.load_state_dict(
-            torch.load(DIFFUSION_CHECKPOINT, map_location=device, weights_only=True)
-        )
+        checkpoint = torch.load(DIFFUSION_CHECKPOINT, map_location=device, weights_only=False)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            diffusion_model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            diffusion_model.load_state_dict(checkpoint)
         diffusion_model.eval()
         diffusion_process = SimpleDiffusion(n_steps=500, device=device)
         DIFFUSION_AVAILABLE = True
@@ -480,8 +480,11 @@ def generate_voice_audio(text: str, stress_level: float) -> str:
         tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
         output_path = tmp.name
         tmp.close()
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(_tts_async(text, output_path, stress_level))
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_tts_async(text, output_path, stress_level))
+        finally:
+            loop.close()
         return output_path
     except:
         return None

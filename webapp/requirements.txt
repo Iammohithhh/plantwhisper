@@ -14,4 +14,3 @@ librosa
 edge-tts
 groq
 grad-cam
-nest-asyncio
