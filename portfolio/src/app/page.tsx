@@ -425,28 +425,18 @@ function Demo() {
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const HF_DIRECT = "https://Iammohithhh-plantwhisper.hf.space";
-  // Vercel proxy for quick health checks only (analysis is too slow for Vercel's 30s timeout)
-  const PROXY_BASE = "/hf-api";
-
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const lastFileRef = useRef<File | null>(null);
 
   async function waitForBackend(): Promise<boolean> {
-    // Try waking the backend via Vercel proxy first (avoids CORS for health check)
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
       try {
         setStatusMsg(
           i === 0
             ? "Checking backend..."
-            : `Waking up HF Space (${i}/5)...`
+            : `Waking up HF Space (${i}/7)...`
         );
-        const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), 10000);
-        const res = await fetch(`${PROXY_BASE}/health`, {
-          signal: controller.signal,
-        });
-        clearTimeout(t);
+        const res = await fetch("/api/health");
         if (res.ok) {
           setStatusMsg(null);
           return true;
@@ -480,30 +470,28 @@ function Demo() {
       return;
     }
 
-    // Step 2: Call the analysis endpoint directly (bypasses Vercel 30s timeout)
+    // Step 2: Call analysis through Vercel serverless proxy (300s timeout, no CORS issues)
     setStatusMsg("Analyzing your plant — this takes ~60s on CPU...");
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 180000); // 3 min timeout
-
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch(`${HF_DIRECT}/api/analyze`, {
+      const res = await fetch("/api/analyze", {
         method: "POST",
         body: formData,
-        signal: controller.signal,
       });
-      clearTimeout(timeout);
 
-      if (!res.ok) throw new Error(`Analysis failed (HTTP ${res.status})`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Analysis failed (HTTP ${res.status})`);
+      }
       const data = await res.json();
       setResult(data);
     } catch (err) {
       const msg =
-        err instanceof Error && err.name === "AbortError"
-          ? "Analysis timed out (>3 min). The model may be overloaded — try again."
-          : "Analysis request failed. This may be a CORS or network issue — try again.";
+        err instanceof Error
+          ? err.message
+          : "Analysis request failed — try again.";
       setError(msg);
     } finally {
       setLoading(false);
