@@ -54,24 +54,38 @@ classifier.to(device)
 classifier.eval()
 print("✓ Classifier loaded")
 
-# --- SAM Segmentation ---
-print("Loading SAM segmentation...")
+# --- Segmentation: FastSAM (preferred on CPU) → SAM → green threshold fallback ---
+FASTSAM_AVAILABLE = False
+SAM_AVAILABLE = False
+fastsam_model = None
+sam_predictor = None
+
+# Try FastSAM first (lightweight, ~23MB, great for CPU)
+print("Loading segmentation...")
 try:
-    from segment_anything import sam_model_registry, SamPredictor
-    
-    SAM_CHECKPOINT = "sam_vit_b_01ec64.pth"
-    if not os.path.exists(SAM_CHECKPOINT):
-        print("Downloading SAM checkpoint...")
-        os.system(f"wget -q https://dl.fbaipublicfiles.com/segment_anything/{SAM_CHECKPOINT}")
-    
-    sam = sam_model_registry["vit_b"](checkpoint=SAM_CHECKPOINT)
-    sam.to(device)
-    sam_predictor = SamPredictor(sam)
-    SAM_AVAILABLE = True
-    print("✓ SAM loaded")
+    from ultralytics import YOLO as FastSAM_YOLO
+    FASTSAM_CHECKPOINT = "FastSAM-s.pt"
+    fastsam_model = FastSAM_YOLO(FASTSAM_CHECKPOINT)
+    FASTSAM_AVAILABLE = True
+    print("✓ FastSAM loaded (lightweight)")
 except Exception as e:
-    print(f"⚠ SAM not available: {e}")
-    SAM_AVAILABLE = False
+    print(f"⚠ FastSAM not available: {e}")
+
+# Try full SAM as fallback (heavier, ~375MB, better on GPU)
+if not FASTSAM_AVAILABLE:
+    try:
+        from segment_anything import sam_model_registry, SamPredictor
+        SAM_CHECKPOINT = "sam_vit_b_01ec64.pth"
+        if not os.path.exists(SAM_CHECKPOINT):
+            print("Downloading SAM checkpoint...")
+            os.system(f"wget -q https://dl.fbaipublicfiles.com/segment_anything/{SAM_CHECKPOINT}")
+        sam = sam_model_registry["vit_b"](checkpoint=SAM_CHECKPOINT)
+        sam.to(device)
+        sam_predictor = SamPredictor(sam)
+        SAM_AVAILABLE = True
+        print("✓ SAM loaded (full)")
+    except Exception as e:
+        print(f"⚠ SAM not available: {e}")
 
 # --- Grad-CAM ---
 print("Loading Grad-CAM...")
@@ -139,11 +153,39 @@ print("\n🌱 PlantWhisper ready!\n")
 # ============================================
 
 def segment_plant(image: np.ndarray) -> tuple:
-    """Segment plant using SAM or fallback to simple threshold."""
-    if SAM_AVAILABLE:
+    """Segment plant using FastSAM → SAM → green threshold fallback."""
+    h, w = image.shape[:2]
+
+    # Try FastSAM first
+    if FASTSAM_AVAILABLE and fastsam_model is not None:
+        try:
+            results = fastsam_model(image, retina_masks=True, conf=0.4, iou=0.9, verbose=False)
+            if results and results[0].masks is not None:
+                masks = results[0].masks.data.cpu().numpy()
+                # Pick the mask closest to center
+                center_y, center_x = h // 2, w // 2
+                best_idx, best_dist = 0, float('inf')
+                for i, m in enumerate(masks):
+                    m_resized = cv2.resize(m.astype(np.uint8), (w, h)) > 0
+                    ys, xs = np.where(m_resized)
+                    if len(ys) == 0:
+                        continue
+                    cy, cx = ys.mean(), xs.mean()
+                    dist = (cy - center_y) ** 2 + (cx - center_x) ** 2
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_idx = i
+                mask = cv2.resize(masks[best_idx].astype(np.uint8), (w, h)) > 0
+                segmented = image.copy()
+                segmented[~mask] = [240, 240, 240]
+                return segmented, mask
+        except Exception:
+            pass
+
+    # Try full SAM
+    if SAM_AVAILABLE and sam_predictor is not None:
         try:
             sam_predictor.set_image(image)
-            h, w = image.shape[:2]
             center = np.array([[w // 2, h // 2]])
             masks, scores, _ = sam_predictor.predict(
                 point_coords=center,
@@ -154,9 +196,9 @@ def segment_plant(image: np.ndarray) -> tuple:
             segmented = image.copy()
             segmented[~mask] = [240, 240, 240]
             return segmented, mask
-        except:
+        except Exception:
             pass
-    
+
     # Fallback: simple green detection
     hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
     mask = cv2.inRange(hsv, (25, 40, 40), (85, 255, 255))
