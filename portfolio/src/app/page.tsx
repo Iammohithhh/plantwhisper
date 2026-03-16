@@ -427,6 +427,8 @@ function Demo() {
     audioMethod?: string;
     segmentedImage?: string;
     gradcamImage?: string;
+    waveformImage?: string;
+    spectrogramImage?: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -772,6 +774,29 @@ function Demo() {
                         <p className="text-emerald-200/60 text-xs mb-1">Synthetic Pops</p>
                         <audio controls src={result.ultrasonicAudio} className="w-full h-8" />
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Waveform & Spectrogram */}
+                {(result.waveformImage || result.spectrogramImage) && (
+                  <div className="p-5 rounded-xl bg-white/[0.03] border border-white/[0.06] space-y-3">
+                    <p className="text-emerald-400/50 text-xs uppercase mb-1">
+                      Ultrasonic Pop Analysis
+                    </p>
+                    {result.waveformImage && (
+                      <img
+                        src={result.waveformImage}
+                        alt="Waveform with detected pops"
+                        className="w-full rounded-lg"
+                      />
+                    )}
+                    {result.spectrogramImage && (
+                      <img
+                        src={result.spectrogramImage}
+                        alt="Spectrogram of pop audio"
+                        className="w-full rounded-lg"
+                      />
                     )}
                   </div>
                 )}
