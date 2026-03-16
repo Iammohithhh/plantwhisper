@@ -429,30 +429,62 @@ function Demo() {
     process.env.NEXT_PUBLIC_HF_API_URL ||
     "https://Iammohithhh-plantwhisper.hf.space";
 
-  async function analyzeImage(file: File) {
+  const [backendStatus, setBackendStatus] = useState<
+    "checking" | "online" | "waking"
+  >("checking");
+  const [retryCount, setRetryCount] = useState(0);
+  const lastFileRef = useRef<File | null>(null);
+
+  // Ping backend on mount to wake it up early
+  useState(() => {
+    fetch(`${HF_API}/`, { method: "GET", mode: "no-cors" })
+      .then(() => setBackendStatus("online"))
+      .catch(() => setBackendStatus("waking"));
+  });
+
+  async function analyzeImage(file: File, attempt = 0): Promise<void> {
     setLoading(true);
     setError(null);
     setResult(null);
+    lastFileRef.current = file;
 
     const reader = new FileReader();
     reader.onload = (e) => setImage(e.target?.result as string);
     reader.readAsDataURL(file);
 
+    const MAX_RETRIES = 3;
+
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000);
+
       const formData = new FormData();
       formData.append("file", file);
 
       const res = await fetch(`${HF_API}/api/analyze`, {
         method: "POST",
         body: formData,
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       if (!res.ok) throw new Error("Analysis failed");
       const data = await res.json();
       setResult(data);
+      setBackendStatus("online");
+      setRetryCount(0);
     } catch {
+      if (attempt < MAX_RETRIES) {
+        setRetryCount(attempt + 1);
+        setError(
+          `Backend is waking up — auto-retrying (${attempt + 1}/${MAX_RETRIES})...`
+        );
+        await new Promise((r) => setTimeout(r, (attempt + 1) * 5000));
+        return analyzeImage(file, attempt + 1);
+      }
+      setRetryCount(0);
       setError(
-        "Backend is waking up — HuggingFace Spaces can take ~30s to cold start. Try again in a moment."
+        "Could not reach the backend. HuggingFace Spaces may be sleeping — please wait a moment and retry."
       );
     } finally {
       setLoading(false);
@@ -587,15 +619,25 @@ function Demo() {
               <div className="h-80 rounded-2xl glass flex items-center justify-center p-8">
                 <div className="text-center">
                   <p className="text-amber-400 font-semibold mb-2">
-                    Connecting to backend...
+                    {retryCount > 0
+                      ? `Waking up backend (attempt ${retryCount}/3)...`
+                      : "Connecting to backend..."}
                   </p>
                   <p className="text-emerald-200/50 text-sm">{error}</p>
-                  <button
-                    onClick={() => fileRef.current?.click()}
-                    className="mt-4 px-6 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    Retry
-                  </button>
+                  {retryCount === 0 && (
+                    <button
+                      onClick={() => {
+                        if (lastFileRef.current) {
+                          analyzeImage(lastFileRef.current);
+                        } else {
+                          fileRef.current?.click();
+                        }
+                      }}
+                      className="mt-4 px-6 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Retry
+                    </button>
+                  )}
                 </div>
               </div>
             )}
