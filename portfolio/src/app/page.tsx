@@ -425,6 +425,8 @@ function Demo() {
     ultrasonicAudio?: string;
     diffusionAudio?: string;
     audioMethod?: string;
+    segmentedImage?: string;
+    gradcamImage?: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -683,15 +685,7 @@ function Demo() {
                 </div>
 
                 {/* Details */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <p className="text-emerald-400/50 text-xs uppercase">
-                      Classification
-                    </p>
-                    <p className="text-white font-semibold text-sm mt-1">
-                      {result.label}
-                    </p>
-                  </div>
+                <div className="grid grid-cols-3 gap-3">
                   <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
                     <p className="text-emerald-400/50 text-xs uppercase">
                       Confidence
@@ -718,7 +712,37 @@ function Demo() {
                   </div>
                 </div>
 
-                {/* Plant voice */}
+                {/* Segmented & GradCAM images */}
+                {(result.segmentedImage || result.gradcamImage) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {result.segmentedImage && (
+                      <div className="rounded-xl overflow-hidden border border-white/[0.06]">
+                        <p className="text-emerald-400/50 text-xs uppercase px-3 pt-3 pb-1">
+                          Segmented
+                        </p>
+                        <img
+                          src={result.segmentedImage}
+                          alt="Segmented plant"
+                          className="w-full h-40 object-contain p-2"
+                        />
+                      </div>
+                    )}
+                    {result.gradcamImage && (
+                      <div className="rounded-xl overflow-hidden border border-white/[0.06]">
+                        <p className="text-emerald-400/50 text-xs uppercase px-3 pt-3 pb-1">
+                          Grad-CAM
+                        </p>
+                        <img
+                          src={result.gradcamImage}
+                          alt="Grad-CAM heatmap"
+                          className="w-full h-40 object-contain p-2"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Plant voice + TTS */}
                 <div className="p-5 rounded-xl bg-emerald-900/30 border border-emerald-800/40">
                   <p className="text-emerald-400/50 text-xs uppercase mb-2">
                     Your Plant Says
@@ -726,20 +750,17 @@ function Demo() {
                   <p className="text-emerald-100/80 italic leading-relaxed">
                     &ldquo;{result.speech}&rdquo;
                   </p>
+                  {result.voiceAudio && (
+                    <audio controls src={result.voiceAudio} className="w-full h-8 mt-3" />
+                  )}
                 </div>
 
-                {/* Audio players */}
-                {(result.voiceAudio || result.ultrasonicAudio || result.diffusionAudio) && (
+                {/* Ultrasonic audio */}
+                {(result.diffusionAudio || result.ultrasonicAudio) && (
                   <div className="p-5 rounded-xl bg-white/[0.03] border border-white/[0.06] space-y-3">
                     <p className="text-emerald-400/50 text-xs uppercase mb-1">
-                      Listen
+                      Ultrasonic Audio
                     </p>
-                    {result.voiceAudio && (
-                      <div>
-                        <p className="text-emerald-200/60 text-xs mb-1">Plant Voice (TTS)</p>
-                        <audio controls src={result.voiceAudio} className="w-full h-8" />
-                      </div>
-                    )}
                     {result.diffusionAudio && (
                       <div>
                         <p className="text-emerald-200/60 text-xs mb-1">Diffusion-Generated Pops</p>
