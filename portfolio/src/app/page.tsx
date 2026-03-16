@@ -421,6 +421,10 @@ function Demo() {
     popsPerHour: number;
     speech: string;
     recommendations: string;
+    voiceAudio?: string;
+    ultrasonicAudio?: string;
+    diffusionAudio?: string;
+    audioMethod?: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -465,7 +469,7 @@ function Demo() {
     if (!isUp) {
       setLoading(false);
       setError(
-        "HuggingFace Space is not responding. Please visit https://huggingface.co/spaces/Iammohithhh/plantwhisper to check if it's running, then retry."
+        "HuggingFace Space is not responding. Please visit https://huggingface.co/spaces/mohithmaddur/plantwhisper-api to check if it's running, then retry."
       );
       return;
     }
@@ -709,7 +713,7 @@ function Demo() {
                       Audio Method
                     </p>
                     <p className="text-white font-semibold text-sm mt-1">
-                      Diffusion
+                      {result.audioMethod || "Diffusion"}
                     </p>
                   </div>
                 </div>
@@ -723,6 +727,33 @@ function Demo() {
                     &ldquo;{result.speech}&rdquo;
                   </p>
                 </div>
+
+                {/* Audio players */}
+                {(result.voiceAudio || result.ultrasonicAudio || result.diffusionAudio) && (
+                  <div className="p-5 rounded-xl bg-white/[0.03] border border-white/[0.06] space-y-3">
+                    <p className="text-emerald-400/50 text-xs uppercase mb-1">
+                      Listen
+                    </p>
+                    {result.voiceAudio && (
+                      <div>
+                        <p className="text-emerald-200/60 text-xs mb-1">Plant Voice (TTS)</p>
+                        <audio controls src={result.voiceAudio} className="w-full h-8" />
+                      </div>
+                    )}
+                    {result.diffusionAudio && (
+                      <div>
+                        <p className="text-emerald-200/60 text-xs mb-1">Diffusion-Generated Pops</p>
+                        <audio controls src={result.diffusionAudio} className="w-full h-8" />
+                      </div>
+                    )}
+                    {result.ultrasonicAudio && !result.diffusionAudio && (
+                      <div>
+                        <p className="text-emerald-200/60 text-xs mb-1">Synthetic Pops</p>
+                        <audio controls src={result.ultrasonicAudio} className="w-full h-8" />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Care */}
                 <div className="p-5 rounded-xl bg-white/[0.03] border border-white/[0.06]">

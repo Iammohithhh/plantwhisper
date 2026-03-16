@@ -4,7 +4,7 @@ export const maxDuration = 300; // 5 min — Vercel Hobby Fluid Compute limit
 export const dynamic = "force-dynamic";
 
 const HF_BACKEND =
-  process.env.HF_API_URL || "https://Iammohithhh-plantwhisper.hf.space";
+  process.env.HF_API_URL || "https://mohithmaddur-plantwhisper-api.hf.space";
 
 export async function POST(req: NextRequest) {
   try {
