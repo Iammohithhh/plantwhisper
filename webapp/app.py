@@ -6,6 +6,22 @@ Deploy on HuggingFace Spaces or run locally:
     cd webapp && python app.py
 """
 
+# ---- Monkey-patch gradio_client schema bug (additionalProperties: True) ----
+# Some gradio_client versions crash when a JSON schema has
+# additionalProperties set to a boolean instead of a dict.
+# We patch the helper so it returns "Any" for bool schemas.
+import gradio_client.utils as _gc_utils
+
+_orig_json_schema_to_python_type = _gc_utils._json_schema_to_python_type
+
+def _patched_json_schema_to_python_type(schema, defs=None):
+    if isinstance(schema, bool):
+        return "Any"
+    return _orig_json_schema_to_python_type(schema, defs)
+
+_gc_utils._json_schema_to_python_type = _patched_json_schema_to_python_type
+# ---- End patch ----
+
 import gradio as gr
 from pathlib import Path
 from backend import analyze_plant, DIFFUSION_AVAILABLE
@@ -425,5 +441,4 @@ if __name__ == "__main__":
         server_port=7860,
         share=False,
         show_api=False,
-        ssr_mode=False,
     )
