@@ -9,11 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the API and the webapp backend it depends on
+# Copy API entrypoint and the shared backend module
 COPY app.py .
-COPY ../webapp/backend.py ./webapp/backend.py
+COPY backend.py .
 
-# If diffusion_model.pt is in the repo root, it gets copied here
+# If diffusion_model.pt is present, copy it
 COPY diffusion_model.pt* ./
 
 ENV PYTHONUNBUFFERED=1
