@@ -52,7 +52,6 @@ Plants emit ultrasonic clicks (20-150 kHz) when stressed through a process calle
 | 3.2 clicks/hour | 20.6 clicks/hour |
 | *"I feel utterly serene..."* | *"I'm withering away..."* |
 
-🔗 **[Try the Live Demo on HuggingFace Spaces](https://huggingface.co/spaces/your-username/plantwhisper)**
 
 ---
 
