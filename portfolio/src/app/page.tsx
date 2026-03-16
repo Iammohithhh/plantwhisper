@@ -425,57 +425,77 @@ function Demo() {
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Use Vercel rewrite proxy to avoid CORS issues with HF Spaces
-  const API_BASE = "/hf-api";
-
-  const [retryCount, setRetryCount] = useState(0);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const lastFileRef = useRef<File | null>(null);
 
-  async function analyzeImage(file: File, attempt = 0): Promise<void> {
+  async function waitForBackend(): Promise<boolean> {
+    for (let i = 0; i < 8; i++) {
+      try {
+        setStatusMsg(
+          i === 0
+            ? "Checking backend..."
+            : `Waking up HF Space (${i}/7)...`
+        );
+        const res = await fetch("/api/health");
+        if (res.ok) {
+          setStatusMsg(null);
+          return true;
+        }
+      } catch {
+        // Space still waking, wait and retry
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    return false;
+  }
+
+  async function analyzeImage(file: File): Promise<void> {
     setLoading(true);
     setError(null);
     setResult(null);
+    setStatusMsg(null);
     lastFileRef.current = file;
 
     const reader = new FileReader();
     reader.onload = (e) => setImage(e.target?.result as string);
     reader.readAsDataURL(file);
 
-    const MAX_RETRIES = 3;
+    // Step 1: Make sure backend is awake
+    const isUp = await waitForBackend();
+    if (!isUp) {
+      setLoading(false);
+      setError(
+        "HuggingFace Space is not responding. Please visit https://huggingface.co/spaces/Iammohithhh/plantwhisper to check if it's running, then retry."
+      );
+      return;
+    }
 
+    // Step 2: Call analysis through Vercel serverless proxy (300s timeout, no CORS issues)
+    setStatusMsg("Analyzing your plant — this takes ~60s on CPU...");
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 90000);
-
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch(`${API_BASE}/api/analyze`, {
+      const res = await fetch("/api/analyze", {
         method: "POST",
         body: formData,
-        signal: controller.signal,
       });
-      clearTimeout(timeout);
 
-      if (!res.ok) throw new Error("Analysis failed");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Analysis failed (HTTP ${res.status})`);
+      }
       const data = await res.json();
       setResult(data);
-      setRetryCount(0);
-    } catch {
-      if (attempt < MAX_RETRIES) {
-        setRetryCount(attempt + 1);
-        setError(
-          `Backend is waking up — auto-retrying (${attempt + 1}/${MAX_RETRIES})...`
-        );
-        await new Promise((r) => setTimeout(r, (attempt + 1) * 5000));
-        return analyzeImage(file, attempt + 1);
-      }
-      setRetryCount(0);
-      setError(
-        "Could not reach the backend. HuggingFace Spaces may be sleeping — please wait a moment and retry."
-      );
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Analysis request failed — try again.";
+      setError(msg);
     } finally {
       setLoading(false);
+      setStatusMsg(null);
     }
   }
 
@@ -594,10 +614,10 @@ function Demo() {
                     ))}
                   </div>
                   <p className="text-emerald-300/80">
-                    Analyzing your plant...
+                    {statusMsg || "Analyzing your plant..."}
                   </p>
                   <p className="text-emerald-400/40 text-sm mt-1">
-                    Running diffusion model
+                    Running 6 AI models on CPU — please be patient
                   </p>
                 </div>
               </div>
@@ -607,25 +627,21 @@ function Demo() {
               <div className="h-80 rounded-2xl glass flex items-center justify-center p-8">
                 <div className="text-center">
                   <p className="text-amber-400 font-semibold mb-2">
-                    {retryCount > 0
-                      ? `Waking up backend (attempt ${retryCount}/3)...`
-                      : "Connecting to backend..."}
+                    Something went wrong
                   </p>
                   <p className="text-emerald-200/50 text-sm">{error}</p>
-                  {retryCount === 0 && (
-                    <button
-                      onClick={() => {
-                        if (lastFileRef.current) {
-                          analyzeImage(lastFileRef.current);
-                        } else {
-                          fileRef.current?.click();
-                        }
-                      }}
-                      className="mt-4 px-6 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium transition-colors"
-                    >
-                      Retry
-                    </button>
-                  )}
+                  <button
+                    onClick={() => {
+                      if (lastFileRef.current) {
+                        analyzeImage(lastFileRef.current);
+                      } else {
+                        fileRef.current?.click();
+                      }
+                    }}
+                    className="mt-4 px-6 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Retry
+                  </button>
                 </div>
               </div>
             )}
