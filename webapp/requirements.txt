@@ -1,0 +1,14 @@
+gradio>=4.0.0
+torch>=2.0.0
+torchvision
+transformers>=4.35.0
+segment-anything
+opencv-python-headless
+numpy
+Pillow
+scipy
+soundfile
+edge-tts
+groq
+pytorch-grad-cam
+nest-asyncio
