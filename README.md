@@ -34,7 +34,7 @@
 Plants emit ultrasonic clicks (20-150 kHz) when stressed through a process called **xylem cavitation**. PlantWhisper inverts this discovery: given a photo of a plant, it predicts the stress level and synthesizes the corresponding acoustic signature.
 
 <p align="center">
-  <img src="assets/pipeline_overview.png" alt="Pipeline Overview" width="700"/>
+  <img src="assets/pipeline_plantwhisper.png" alt="Pipeline Overview" width="700"/>
 </p>
 
 ---
