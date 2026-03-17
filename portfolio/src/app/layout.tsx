@@ -6,7 +6,10 @@ export const metadata: Metadata = {
   description:
     "AI-powered plant health analysis with ultrasonic sound synthesis using diffusion models. Built at IIT Bombay.",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.png", type: "image/png" },
+    ],
   },
   openGraph: {
     title: "PlantWhisper",
