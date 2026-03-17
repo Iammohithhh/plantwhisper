@@ -292,47 +292,160 @@ function Science() {
           <h2 className="text-4xl md:text-5xl font-bold">
             Plants Actually <span className="gradient-text">Make Sounds</span>
           </h2>
+          <p className="text-emerald-200/50 mt-4 max-w-2xl mx-auto">
+            PlantWhisper is inspired by a landmark 2023 study published in{" "}
+            <em>Cell</em> by Khait et al. from Tel Aviv University, which proved
+            for the first time that stressed plants emit informative airborne
+            sounds.
+          </p>
         </div>
 
+        {/* ── The Discovery ── */}
         <div className="grid md:grid-cols-2 gap-8">
           <div className="p-8 rounded-2xl glass">
             <h3 className="text-xl font-bold text-emerald-300 mb-4">
               The Discovery
             </h3>
             <p className="text-emerald-200/70 leading-relaxed mb-4">
-              In 2023, researchers at Tel Aviv University published a
-              groundbreaking study in <em>Cell</em> showing that stressed plants
-              emit ultrasonic clicks (20–150 kHz) through xylem cavitation — air
-              bubbles forming in their water transport vessels.
+              Researchers recorded tomato and tobacco plants inside acoustically
+              isolated chambers using two directional ultrasonic microphones per
+              plant. They discovered that drought-stressed tomato plants emit
+              ~35 ultrasonic clicks per hour, and cut plants ~25 per hour — while
+              healthy control plants emit fewer than 1 sound per hour.
             </p>
             <p className="text-emerald-200/70 leading-relaxed">
-              Drought-stressed plants peak at ~35 clicks per hour. These sounds
-              are inaudible to humans but carry real information about plant
-              health.
+              These sounds fall in the 20–150 kHz ultrasonic range, far above
+              human hearing, with peak intensities around 61–66 dB SPL at 10 cm.
+              The mechanism is believed to be <strong>xylem cavitation</strong> —
+              air bubbles forming and collapsing in the plant&apos;s water
+              transport vessels as it becomes dehydrated.
             </p>
           </div>
 
           <div className="p-8 rounded-2xl glass">
             <h3 className="text-xl font-bold text-emerald-300 mb-4">
-              Our Approach
+              Machine Learning Classification
             </h3>
             <p className="text-emerald-200/70 leading-relaxed mb-4">
-              PlantWhisper uses a <strong>conditional diffusion model</strong>{" "}
-              trained to generate mel spectrograms of these ultrasonic pops,
-              conditioned on the plant&apos;s detected stress level.
+              The researchers trained SVM classifiers (with scattering network
+              features) and CNN models to classify sounds by plant species and
+              stress type. They achieved <strong>~70% accuracy</strong>{" "}
+              distinguishing drought vs. cut sounds and &gt;98% accuracy
+              separating plant sounds from electronic noise.
             </p>
             <p className="text-emerald-200/70 leading-relaxed">
-              The generated spectrograms are converted to audible audio via
-              Griffin-Lim reconstruction, pitch-shifted into human hearing range
-              so you can literally hear your plant&apos;s distress.
+              In greenhouse experiments, a CNN classifier distinguished tomato
+              sounds from background noise with <strong>99.7% accuracy</strong>,
+              and identified drought-stressed vs. irrigated plants with{" "}
+              <strong>84% accuracy</strong> — using sound alone.
             </p>
           </div>
         </div>
 
+        {/* ── Key Findings with image placeholders ── */}
+        <div className="grid md:grid-cols-2 gap-8 mt-8">
+          <div className="p-8 rounded-2xl glass">
+            <h3 className="text-xl font-bold text-emerald-300 mb-4">
+              Stress Sounds Are Species- &amp; Condition-Specific
+            </h3>
+            <p className="text-emerald-200/70 leading-relaxed mb-4">
+              Each plant species and stress type produces a distinct acoustic
+              signature. Drought sounds differ from cut sounds in frequency,
+              intensity, and temporal pattern. The sounds even differ at varying
+              levels of dehydration — the model classified low vs. high soil
+              moisture with <strong>81% accuracy</strong>.
+            </p>
+            {/* Add your Figure 1 image to /public/paper/ and uncomment:
+            <Image src="/paper/figure1.png" alt="Figure 1 – Stressed plants emit remotely detectable ultrasounds" width={600} height={400} className="w-full rounded-lg mt-4" />
+            */}
+            <div className="mt-4 h-48 rounded-lg border-2 border-dashed border-emerald-700/50 flex items-center justify-center text-emerald-500/40 text-sm">
+              Figure 1 — Acoustic box setup &amp; sound classification
+            </div>
+          </div>
+
+          <div className="p-8 rounded-2xl glass">
+            <h3 className="text-xl font-bold text-emerald-300 mb-4">
+              Greenhouse Validation
+            </h3>
+            <p className="text-emerald-200/70 leading-relaxed mb-4">
+              The study moved beyond the lab into real greenhouse conditions.
+              A CNN trained on acoustic-box recordings successfully filtered
+              tomato sounds from greenhouse noise and classified drought-stressed
+              plants from irrigated ones — proving the approach works in
+              realistic, noisy environments.
+            </p>
+            {/* Add your Figure 2 image to /public/paper/ and uncomment:
+            <Image src="/paper/figure2.png" alt="Figure 2 – Greenhouse classifier" width={600} height={400} className="w-full rounded-lg mt-4" />
+            */}
+            <div className="mt-4 h-48 rounded-lg border-2 border-dashed border-emerald-700/50 flex items-center justify-center text-emerald-500/40 text-sm">
+              Figure 2 — CNN classifier &amp; greenhouse results
+            </div>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-8 mt-8">
+          <div className="p-8 rounded-2xl glass">
+            <h3 className="text-xl font-bold text-emerald-300 mb-4">
+              Dehydration &amp; Sound Over Time
+            </h3>
+            <p className="text-emerald-200/70 leading-relaxed mb-4">
+              Long-term greenhouse monitoring revealed that sound emission follows
+              a hump-shaped pattern: it rises during the first days without water,
+              peaks around day 4–5, then declines as the plant dries out
+              completely. A daily pattern also emerged, with peaks in late morning
+              and a &ldquo;midday depression&rdquo; mirroring stomatal
+              conductance cycles. Almost all sounds occurred when soil volumetric
+              water content dropped below 5%.
+            </p>
+            {/* Add your Figure 3 image to /public/paper/ and uncomment:
+            <Image src="/paper/figure3.png" alt="Figure 3 – Dehydration acoustic patterns" width={600} height={400} className="w-full rounded-lg mt-4" />
+            */}
+            <div className="mt-4 h-48 rounded-lg border-2 border-dashed border-emerald-700/50 flex items-center justify-center text-emerald-500/40 text-sm">
+              Figure 3 — Dehydration patterns over days &amp; hours
+            </div>
+          </div>
+
+          <div className="p-8 rounded-2xl glass">
+            <h3 className="text-xl font-bold text-emerald-300 mb-4">
+              Sounds Track Transpiration Rate
+            </h3>
+            <p className="text-emerald-200/70 leading-relaxed mb-4">
+              The number of sounds emitted per hour strongly correlates with the
+              plant&apos;s transpiration rate — both peak in the late morning and
+              dip at night. However, as dehydration progresses over days, the
+              daily transpiration rate decreases while sound emission does not,
+              suggesting sounds capture stress signals that go beyond water loss
+              alone.
+            </p>
+            {/* Add your Figure 4 image to /public/paper/ and uncomment:
+            <Image src="/paper/figure4.png" alt="Figure 4 – Sound-transpiration correlation" width={600} height={400} className="w-full rounded-lg mt-4" />
+            */}
+            <div className="mt-4 h-48 rounded-lg border-2 border-dashed border-emerald-700/50 flex items-center justify-center text-emerald-500/40 text-sm">
+              Figure 4 — Sound-transpiration correlation
+            </div>
+          </div>
+        </div>
+
+        {/* ── Our Approach ── */}
+        <div className="mt-8 p-8 rounded-2xl glass">
+          <h3 className="text-xl font-bold text-emerald-300 mb-4 text-center">
+            How PlantWhisper Builds on This
+          </h3>
+          <p className="text-emerald-200/70 leading-relaxed mb-4 text-center max-w-3xl mx-auto">
+            PlantWhisper uses a <strong>conditional diffusion model</strong>{" "}
+            trained to generate mel spectrograms of these ultrasonic emissions,
+            conditioned on the plant&apos;s detected stress level from visual
+            analysis. The generated spectrograms are converted to audible audio
+            via Griffin-Lim reconstruction, pitch-shifted into human hearing
+            range — so you can literally hear your plant&apos;s distress.
+          </p>
+        </div>
+
         <div className="mt-10 p-6 rounded-2xl bg-emerald-900/30 border border-emerald-800/50 text-center">
           <p className="text-emerald-300/80 text-sm">
-            <strong>Reference:</strong> Khait, I., et al. (2023).
-            &ldquo;Sounds emitted by plants under stress are airborne and
+            <strong>Reference:</strong> Khait, I., Lewin-Epstein, O., Sharon,
+            R., Sade, N., Yovel, Y., &amp; Hadany, L. (2023). &ldquo;Sounds
+            emitted by plants under stress are airborne and
             informative.&rdquo; <em>Cell</em>, 186(7), 1328–1336.
           </p>
         </div>
@@ -839,17 +952,18 @@ function About() {
           About
         </p>
         <h2 className="text-4xl md:text-5xl font-bold mb-8">
-          Built at <span className="gradient-text">IIT Bombay</span>
+          About <span className="gradient-text">PlantWhisper</span>
         </h2>
         <p className="text-emerald-200/70 text-lg leading-relaxed mb-6">
-          PlantWhisper was created by <strong>Mohith</strong> — B.Tech Chemical
-          Engineering with AI/ML Minor at the Indian Institute of Technology
-          Bombay (Class of 2027).
+          Created by <strong>Mohith</strong> — an undergraduate in Chemical
+          Engineering with an AI/ML Minor, passionate about bridging biological
+          sciences with deep learning.
         </p>
         <p className="text-emerald-200/50 leading-relaxed">
-          This project explores the intersection of computer vision, generative
-          audio, and plant biology — turning cutting-edge acoustic research into
-          an accessible, multimodal AI experience.
+          PlantWhisper sits at the intersection of computer vision, generative
+          audio, and plant biology — translating groundbreaking acoustic research
+          into an accessible, multimodal AI experience that lets you hear what
+          your plants are feeling.
         </p>
       </div>
     </section>
