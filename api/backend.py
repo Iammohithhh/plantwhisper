@@ -225,8 +225,12 @@ DIFFUSION_AVAILABLE = False
 diffusion_model = None
 diffusion_process = None
 
-DIFFUSION_CHECKPOINT = os.environ.get("DIFFUSION_CHECKPOINT", "diffusion_model.pt")
-print("Loading diffusion model...")
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DIFFUSION_CHECKPOINT = os.environ.get(
+    "DIFFUSION_CHECKPOINT",
+    os.path.join(_SCRIPT_DIR, "diffusion_model.pt"),
+)
+print(f"Loading diffusion model from: {DIFFUSION_CHECKPOINT}")
 try:
     if os.path.exists(DIFFUSION_CHECKPOINT):
         diffusion_model = ConditionalUNet().to(device)
