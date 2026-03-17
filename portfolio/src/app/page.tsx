@@ -342,7 +342,7 @@ function Science() {
           </div>
         </div>
 
-        {/* ── Key Findings with image placeholders ── */}
+        {/* ── Key Findings ── */}
         <div className="grid md:grid-cols-2 gap-8 mt-8">
           <div className="p-8 rounded-2xl glass">
             <h3 className="text-xl font-bold text-emerald-300 mb-4">
@@ -355,12 +355,7 @@ function Science() {
               levels of dehydration — the model classified low vs. high soil
               moisture with <strong>81% accuracy</strong>.
             </p>
-            {/* Add your Figure 1 image to /public/paper/ and uncomment:
             <Image src="/paper/figure1.png" alt="Figure 1 – Stressed plants emit remotely detectable ultrasounds" width={600} height={400} className="w-full rounded-lg mt-4" />
-            */}
-            <div className="mt-4 h-48 rounded-lg border-2 border-dashed border-emerald-700/50 flex items-center justify-center text-emerald-500/40 text-sm">
-              Figure 1 — Acoustic box setup &amp; sound classification
-            </div>
           </div>
 
           <div className="p-8 rounded-2xl glass">
@@ -374,12 +369,7 @@ function Science() {
               plants from irrigated ones — proving the approach works in
               realistic, noisy environments.
             </p>
-            {/* Add your Figure 2 image to /public/paper/ and uncomment:
-            <Image src="/paper/figure2.png" alt="Figure 2 – Greenhouse classifier" width={600} height={400} className="w-full rounded-lg mt-4" />
-            */}
-            <div className="mt-4 h-48 rounded-lg border-2 border-dashed border-emerald-700/50 flex items-center justify-center text-emerald-500/40 text-sm">
-              Figure 2 — CNN classifier &amp; greenhouse results
-            </div>
+            <Image src="/paper/figure2.png" alt="Figure 2 – Greenhouse classifier and results" width={600} height={400} className="w-full rounded-lg mt-4" />
           </div>
         </div>
 
@@ -397,12 +387,7 @@ function Science() {
               conductance cycles. Almost all sounds occurred when soil volumetric
               water content dropped below 5%.
             </p>
-            {/* Add your Figure 3 image to /public/paper/ and uncomment:
             <Image src="/paper/figure3.png" alt="Figure 3 – Dehydration acoustic patterns" width={600} height={400} className="w-full rounded-lg mt-4" />
-            */}
-            <div className="mt-4 h-48 rounded-lg border-2 border-dashed border-emerald-700/50 flex items-center justify-center text-emerald-500/40 text-sm">
-              Figure 3 — Dehydration patterns over days &amp; hours
-            </div>
           </div>
 
           <div className="p-8 rounded-2xl glass">
@@ -417,12 +402,7 @@ function Science() {
               suggesting sounds capture stress signals that go beyond water loss
               alone.
             </p>
-            {/* Add your Figure 4 image to /public/paper/ and uncomment:
             <Image src="/paper/figure4.png" alt="Figure 4 – Sound-transpiration correlation" width={600} height={400} className="w-full rounded-lg mt-4" />
-            */}
-            <div className="mt-4 h-48 rounded-lg border-2 border-dashed border-emerald-700/50 flex items-center justify-center text-emerald-500/40 text-sm">
-              Figure 4 — Sound-transpiration correlation
-            </div>
           </div>
         </div>
 
