@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "PlantWhisper — Give Your Plants a Voice",
   description:
-    "AI-powered plant health analysis with ultrasonic sound synthesis using diffusion models. Built at IIT Bombay.",
+    "AI-powered plant health analysis with ultrasonic sound synthesis using diffusion models.",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
