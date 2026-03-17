@@ -5,6 +5,12 @@ export const metadata: Metadata = {
   title: "PlantWhisper — Give Your Plants a Voice",
   description:
     "AI-powered plant health analysis with ultrasonic sound synthesis using diffusion models. Built at IIT Bombay.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.png", type: "image/png" },
+    ],
+  },
   openGraph: {
     title: "PlantWhisper",
     description: "Hear what your plants are trying to tell you.",
