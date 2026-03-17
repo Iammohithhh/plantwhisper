@@ -349,17 +349,23 @@ def is_plant_image(mask: np.ndarray, classification: dict) -> bool:
 
     Uses two signals:
     - Segmentation mask coverage: plants should cover a meaningful portion of the image
-    - Classification confidence: MobileNetV2 trained on PlantVillage will have low
-      confidence on non-plant images
+    - Classification confidence: MobileNetV2 trained on PlantVillage gives 30%+ on
+      real plants but typically <25% on non-plant images (random baseline ~2.6% across
+      38 classes)
     """
     mask_coverage = np.sum(mask) / mask.size if mask is not None else 0.0
     confidence = classification.get('confidence', 0.0)
 
-    # If segmentation found almost nothing AND classifier is uncertain, not a plant
-    if mask_coverage < 0.02 and confidence < 0.15:
+    # Very low confidence — almost certainly not a plant
+    if confidence < 0.10:
         return False
 
-    # If segmentation found essentially nothing regardless of confidence
+    # Low confidence combined with weak segmentation — not a plant
+    # (colored objects like UI elements can fool the green HSV fallback)
+    if confidence < 0.30 and mask_coverage < 0.05:
+        return False
+
+    # Segmentation found essentially nothing
     if mask_coverage < 0.005:
         return False
 
