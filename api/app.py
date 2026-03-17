@@ -63,6 +63,13 @@ async def analyze(file: UploadFile = File(...)):
         diffusion_audio,
     ) = pw.analyze_plant(image_np, use_diffusion=True)
 
+    # Check if the image was rejected as not containing a plant
+    if status_md == "NOT_A_PLANT":
+        return JSONResponse(
+            {"error": "No plant detected in the image. Please upload a clear photo of a plant and try again."},
+            status_code=422,
+        )
+
     # Compute values for the frontend
     classification = pw.classify_plant(
         segmented if segmented is not None else image_np
