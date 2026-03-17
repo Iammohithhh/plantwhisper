@@ -50,7 +50,7 @@ classifier.to(device)
 classifier.eval()
 print("✓ Classifier loaded")
 
-# --- Segmentation: FastSAM → SAM → green threshold fallback ---
+# --- Segmentation: FastSAM → SAM ---
 FASTSAM_AVAILABLE = False
 SAM_AVAILABLE = False
 fastsam_model = None
@@ -251,7 +251,7 @@ print("\n🌱 PlantWhisper backend ready!\n")
 # ============================================
 
 def segment_plant(image: np.ndarray) -> tuple:
-    """Segment plant using FastSAM → SAM → green threshold fallback."""
+    """Segment plant using FastSAM → SAM, or pass through original image."""
     h, w = image.shape[:2]
 
     if FASTSAM_AVAILABLE and fastsam_model is not None:
@@ -294,13 +294,11 @@ def segment_plant(image: np.ndarray) -> tuple:
         except Exception:
             pass
 
-    # Fallback: green detection
-    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-    mask = cv2.inRange(hsv, (25, 40, 40), (85, 255, 255))
-    mask = mask > 0
-    segmented = image.copy()
-    segmented[~mask] = [240, 240, 240]
-    return segmented, mask
+    # No segmentation model available — return original image with empty mask.
+    # The classifier works fine on unsegmented images, and HSV green detection
+    # causes more harm than good (misses non-green plant parts, produces garbage
+    # on non-plant images).
+    return image.copy(), np.zeros((h, w), dtype=bool)
 
 
 def classify_plant(image: np.ndarray) -> dict:
@@ -347,26 +345,25 @@ def generate_gradcam(image: np.ndarray) -> np.ndarray:
 def is_plant_image(mask: np.ndarray, classification: dict) -> bool:
     """Check if the image actually contains a plant.
 
-    Uses two signals:
-    - Segmentation mask coverage: plants should cover a meaningful portion of the image
-    - Classification confidence: MobileNetV2 trained on PlantVillage gives 30%+ on
-      real plants but typically <25% on non-plant images (random baseline ~2.6% across
-      38 classes)
+    Uses classification confidence as the primary signal. When a segmentation
+    model is available, mask coverage provides an additional check.
+    MobileNetV2 trained on PlantVillage gives 40%+ on real plants but
+    typically <25% on non-plant images (random baseline ~2.6% across 38 classes).
     """
     mask_coverage = np.sum(mask) / mask.size if mask is not None else 0.0
     confidence = classification.get('confidence', 0.0)
+    has_segmentation = mask_coverage > 0.005
 
     # Very low confidence — almost certainly not a plant
     if confidence < 0.10:
         return False
 
-    # Low confidence combined with weak segmentation — not a plant
-    # (colored objects like UI elements can fool the green HSV fallback)
-    if confidence < 0.30 and mask_coverage < 0.05:
-        return False
+    # No segmentation model available — rely on classifier confidence alone
+    if not has_segmentation:
+        return confidence >= 0.40
 
-    # Segmentation found essentially nothing
-    if mask_coverage < 0.005:
+    # Have segmentation: moderate confidence + weak mask = not a plant
+    if confidence < 0.40 and mask_coverage < 0.10:
         return False
 
     return True
