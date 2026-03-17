@@ -2,36 +2,36 @@
   <img src="assets/plantwhisper_banner.png" alt="PlantWhisper Banner" width="800"/>
 </p>
 
-<h1 align="center">🌱 PlantWhisper</h1>
+<h1 align="center">PlantWhisper</h1>
 
 <p align="center">
   <strong>"Listen to what your plants are trying to tell you"</strong>
 </p>
 
 <p align="center">
-  <a href="#-demo">Demo</a> •
-  <a href="#-features">Features</a> •
-  <a href="#-architecture">Architecture</a> •
-  <a href="#-installation">Installation</a> •
-  <a href="#-usage">Usage</a> •
-  <a href="#-scientific-foundation">Science</a> •
+  <a href="#-demo">Demo</a> &bull;
+  <a href="#-features">Features</a> &bull;
+  <a href="#-architecture">Architecture</a> &bull;
+  <a href="#-getting-started">Getting Started</a> &bull;
+  <a href="#-scientific-foundation">Science</a> &bull;
   <a href="#-results">Results</a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.8+-blue.svg" alt="Python"/>
+  <img src="https://img.shields.io/badge/Python-3.11+-blue.svg" alt="Python"/>
   <img src="https://img.shields.io/badge/PyTorch-2.0+-red.svg" alt="PyTorch"/>
-  <img src="https://img.shields.io/badge/HuggingFace-Transformers-yellow.svg" alt="HuggingFace"/>
+  <img src="https://img.shields.io/badge/Next.js-15-black.svg" alt="Next.js"/>
+  <img src="https://img.shields.io/badge/FastAPI-0.100+-009688.svg" alt="FastAPI"/>
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"/>
 </p>
 
 ---
 
-## 🎯 Overview
+## Overview
 
-**PlantWhisper** is a multimodal AI system that analyzes plant photos to detect stress levels and generates acoustic signatures representing what stressed plants actually sound like — pitch-shifted to the human audible range.
+**PlantWhisper** is a multimodal AI system that analyzes plant photos to detect stress levels and generates acoustic signatures representing what stressed plants actually sound like — pitch-shifted into the human audible range.
 
-Plants emit ultrasonic clicks (20-150 kHz) when stressed through a process called **xylem cavitation**. PlantWhisper inverts this discovery: given a photo of a plant, it predicts the stress level and synthesizes the corresponding acoustic signature.
+Plants emit ultrasonic clicks (20–150 kHz) when stressed through a process called **xylem cavitation**. PlantWhisper inverts this discovery: given a photo of a plant, it predicts the stress level and synthesizes the corresponding acoustic signature.
 
 <p align="center">
   <img src="assets/pipeline_plantwhisper.png" alt="Pipeline Overview" width="700"/>
@@ -39,7 +39,7 @@ Plants emit ultrasonic clicks (20-150 kHz) when stressed through a process calle
 
 ---
 
-## 🎬 Demo
+## Demo
 
 <p align="center">
   <img src="assets/corn_1.jfif" alt="Healthy Plant Analysis" width="45%"/>
@@ -47,42 +47,38 @@ Plants emit ultrasonic clicks (20-150 kHz) when stressed through a process calle
 </p>
 
 | Healthy Plant (7% Stress) | Stressed Plant (83% Stress) |
-|---------------------------|------------------------------|
+|---|---|
 | Minimal ultrasonic activity | Active distress clicking |
 | 3.2 clicks/hour | 20.6 clicks/hour |
 | *"I feel utterly serene..."* | *"I'm withering away..."* |
 
+---
+
+## Features
+
+### Computer Vision Pipeline
+- **SAM Segmentation** — Segment-Anything Model (with FastSAM fallback) for precise leaf isolation
+- **MobileNetV2 Classifier** — Plant disease detection across 38 classes with 95%+ accuracy
+- **Grad-CAM Explainability** — Visual attention maps highlighting areas of concern
+
+### Acoustic Synthesis
+- **Real Tel Aviv Data** — Based on actual ultrasonic recordings from stressed plants
+- **Conditional Diffusion Model** — Generates mel spectrograms conditioned on stress level
+- **Griffin-Lim Vocoder** — Converts spectrograms to audio
+- **Pitch Shifting** — 53 kHz to 1 kHz for human audibility
+
+### Plant Persona
+- **LLM Speech Generation** — Groq / Llama 3.3 70B generates emotionally appropriate plant speech
+- **Text-to-Speech** — Edge-TTS with stress-modulated pitch, rate, and tone
+- **Care Recommendations** — Actionable advice from "keep it up" to "emergency care needed"
 
 ---
 
-## ✨ Features
-
-### 🔬 Computer Vision Pipeline
-- **SAM Segmentation** — Segment-Anything Model for precise leaf isolation
-- **MobileNetV2 Classifier** — Plant disease detection (38 classes, 95%+ accuracy)
-- **Grad-CAM Explainability** — Visual attention maps showing areas of concern
-
-### 🎵 Acoustic Synthesis
-- **Real Tel Aviv Data** — Uses actual ultrasonic recordings from stressed plants
-- **Diffusion Model** — Conditional spectrogram generation based on stress level
-- **Pitch Shifting** — 53kHz → 1kHz for human audibility
-
-### 🗣️ Plant Persona
-- **LLM Voice Generation** — Groq/Llama generates emotionally appropriate plant speech
-- **Text-to-Speech** — Edge-TTS converts to natural audio
-- **Stress-Modulated Voice** — Tone, pitch, and rate change with stress level
-
-### 💊 Care Recommendations
-- **AI-Powered Advice** — Actionable care instructions based on detected stress
-- **Severity-Appropriate** — From "keep doing what you're doing" to "emergency care needed"
-
----
-
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                           PlantWhisper Pipeline                          │
+│                           PlantWhisper Pipeline                        │
 └─────────────────────────────────────────────────────────────────────────┘
 
      ┌──────────┐      ┌──────────────┐      ┌─────────────┐
@@ -115,65 +111,76 @@ Plants emit ultrasonic clicks (20-150 kHz) when stressed through a process calle
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 PlantWhisper/
+├── api/                              # FastAPI backend (production)
+│   ├── app.py                        #   REST API server (port 7860)
+│   ├── backend.py                    #   ML inference engine
+│   ├── requirements.txt              #   Python dependencies
+│   └── Dockerfile                    #   Container deployment
+│
+├── portfolio/                        # Next.js 15 showcase website
+│   ├── src/app/page.tsx              #   Landing page
+│   ├── public/                       #   Static assets
+│   ├── vercel.json                   #   Vercel deployment config
+│   └── package.json                  #   Node dependencies
+│
+├── webapp/                           # Gradio web app (HuggingFace Spaces)
+│   ├── app.py                        #   Gradio interface
+│   ├── backend.py                    #   ML inference engine
+│   └── requirements.txt              #   Python dependencies
+│
 ├── notebooks/
-│   ├── 01_data_exploration.ipynb      # Tel Aviv dataset analysis
-│   ├── 02_vision_pipeline.ipynb       # SAM + Classifier + Grad-CAM
-│   ├── 03_acoustic_synthesis.ipynb    # Audio generation + Diffusion + Plant Persona
-│   └── 06_full_demo.ipynb             # Complete end-to-end pipeline
+│   ├── 01_data_exploration.ipynb     # Tel Aviv dataset analysis
+│   ├── 02_vision_pipeline.ipynb      # SAM + Classifier + Grad-CAM
+│   ├── 03_acoustic_synthesis.ipynb   # Audio generation + Diffusion + Persona
+│   └── 06_full_demo.ipynb            # Complete end-to-end pipeline
 │
-├── webapp/
-│   ├── app.py                         # Gradio web application
-│   ├── requirements.txt               # Dependencies
-│   └── README.md                      # HuggingFace Spaces config
-│
-├── assets/
-│   ├── plantwhisper_banner.png
-│   ├── demo_healthy.png
-│   ├── demo_stressed.png
-│   └── pipeline_overview.png
-│
-├── README.md                          # This file
-├── LICENSE                            # MIT License
-└── .gitignore
+├── assets/                           # Images for README & docs
+├── paper/                            # Research paper figures
+├── README.md
+└── LICENSE
 ```
 
 ---
 
-## 🚀 Installation
+## Getting Started
 
-### Option 1: Run Notebooks in Google Colab (Recommended)
+### Option 1: Run in Google Colab (Quickest)
 
-1. Open any notebook in Google Colab
-2. Enable GPU: `Runtime → Change runtime type → GPU`
+1. Open any notebook from `notebooks/` in Google Colab
+2. Enable GPU: **Runtime > Change runtime type > GPU**
 3. Run all cells
 
-### Option 2: Local Installation
+### Option 2: Run the FastAPI Backend
 
 ```bash
-# Clone repository
-git clone https://github.com/your-username/PlantWhisper.git
-cd PlantWhisper
+git clone https://github.com/Iammohithhh/plantwhisper.git
+cd plantwhisper/api
 
-# Create environment
-conda create -n plantwhisper python=3.10
-conda activate plantwhisper
+pip install -r requirements.txt
+export GROQ_API_KEY="your-api-key"
 
-# Install dependencies
-pip install torch torchvision torchaudio
-pip install transformers segment-anything
-pip install gradio groq edge-tts
-pip install opencv-python matplotlib scipy librosa soundfile
-pip install pytorch-grad-cam
-
-# Download SAM checkpoint
-wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
+uvicorn app:app --host 0.0.0.0 --port 7860
+# API available at http://localhost:7860
 ```
 
-### Option 3: Run Web App
+**Endpoints:**
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/analyze` | Upload a plant image, get full analysis |
+
+### Option 3: Run with Docker
+
+```bash
+cd api
+docker build -t plantwhisper-api .
+docker run -p 7860:7860 -e GROQ_API_KEY="your-api-key" plantwhisper-api
+```
+
+### Option 4: Run the Gradio App
 
 ```bash
 cd webapp
@@ -183,56 +190,34 @@ python app.py
 # Open http://localhost:7860
 ```
 
----
+### Option 5: Run the Portfolio Site
 
-## 📖 Usage
-
-### Quick Start (Full Demo)
-
-```python
-from plantwhisper import analyze_plant
-
-# Analyze a plant image
-results = analyze_plant("path/to/plant_image.jpg")
-
-# Results include:
-# - Stress level (0-100%)
-# - Segmented image
-# - Grad-CAM heatmap
-# - Care recommendations
-# - Plant speech text
-# - Audio files (voice + ultrasonic)
+```bash
+cd portfolio
+npm install
+npm run dev
+# Open http://localhost:3000
 ```
 
-### Notebook Workflow
-
-| Notebook | Purpose | Runtime |
-|----------|---------|---------|
-| `01_data_exploration.ipynb` | Explore Tel Aviv ultrasonic dataset | 5 min |
-| `02_vision_pipeline.ipynb` | Build vision model + Grad-CAM | 10 min |
-| `03_acoustic_synthesis.ipynb` | Train diffusion model + plant persona | 20 min |
-| `06_full_demo.ipynb` | Run complete pipeline | 5 min |
-
 ---
 
-## 🔬 Scientific Foundation
-
-### Plant Acoustics Research
+## Scientific Foundation
 
 This project is based on groundbreaking research from Tel Aviv University:
 
-> **Khait, I., et al. (2023).** *Sounds emitted by plants under stress are airborne and informative.* **Cell, 186(7), 1328-1336.**
+> **Khait, I., et al. (2023).** *Sounds emitted by plants under stress are airborne and informative.* **Cell, 186(7), 1328–1336.**
 > [DOI: 10.1016/j.cell.2023.03.009](https://www.cell.com/cell/fulltext/S0092-8674(23)00262-3)
 
-**Key Findings:**
-- Plants emit ultrasonic clicks (20-150 kHz) when stressed
-- Drought-stressed tomatoes: ~35 clicks/hour
-- Healthy plants: <1 click/hour
-- Mechanism: Xylem cavitation (air bubbles in water transport vessels)
+**Key findings:**
+- Plants emit ultrasonic clicks (20–150 kHz) when stressed
+- Drought-stressed tomatoes produce ~35 clicks/hour vs. <1 for healthy plants
+- CNN classifiers achieved **99.7% accuracy** separating plant sounds from noise
+- Drought vs. irrigated classification reached **84% accuracy** using sound alone
+- Mechanism: xylem cavitation (air bubbles forming in water transport vessels)
 
-### Stress-Pop Rate Curve
+### Stress–Sound Curve
 
-PlantWhisper implements the **hump-shaped stress curve** from the paper:
+PlantWhisper implements the **hump-shaped stress curve** from the paper — sound emission rises with dehydration, peaks around day 4–5, then declines as the plant dries out completely:
 
 ```
 Pops/Hour
@@ -250,42 +235,19 @@ Pops/Hour
          Healthy  Mild  Moderate Severe Critical
 ```
 
-**Why hump-shaped?** Severely stressed plants (>80%) have collapsed xylem and can't emit — they're dying.
+Severely stressed plants (>80%) have collapsed xylem and can no longer emit — they are dying.
 
 ---
 
-## 📊 Results
+## Results
 
 ### Vision Pipeline Performance
 
 | Component | Model | Accuracy |
 |-----------|-------|----------|
 | Plant Classification | MobileNetV2 | 95.4% |
-| Segmentation | SAM ViT-B | High IoU |
+| Segmentation | SAM ViT-B / FastSAM | High IoU |
 | Stress Estimation | Confidence-based | Validated |
-
-### Sample Outputs
-
-<table>
-<tr>
-<td width="50%">
-
-**Healthy Plant**
-- Stress: 7%
-- Clicks: 3.2/hour
-- Status: ✅ Thriving
-
-</td>
-<td width="50%">
-
-**Stressed Plant**
-- Stress: 83%
-- Clicks: 20.6/hour
-- Status: ⚠️ Needs care
-
-</td>
-</tr>
-</table>
 
 ### Generated Plant Speech Examples
 
@@ -297,64 +259,63 @@ Pops/Hour
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Category | Technologies |
 |----------|--------------|
 | **Deep Learning** | PyTorch, HuggingFace Transformers |
-| **Computer Vision** | SAM, MobileNetV2, Grad-CAM, OpenCV |
-| **Audio** | Diffusion Models, librosa, scipy, Griffin-Lim |
+| **Computer Vision** | SAM / FastSAM, MobileNetV2, Grad-CAM, OpenCV |
+| **Audio** | Conditional Diffusion UNet, librosa, scipy, Griffin-Lim |
 | **LLM** | Groq API (Llama 3.3 70B) |
 | **TTS** | Edge-TTS (Microsoft) |
-| **Web App** | Gradio |
-| **Data** | Tel Aviv Plant Acoustics Dataset |
+| **Backend** | FastAPI, Uvicorn, Docker |
+| **Frontend** | Next.js 15, React 19, Tailwind CSS 4, TypeScript |
+| **Deployment** | Vercel (portfolio), HuggingFace Spaces (webapp), Docker (API) |
 
 ---
 
-## 🔮 Future Work
+## Future Work
 
-- [ ] **Real Hardware Validation** — Use ultrasonic microphones to capture real plant sounds
-- [ ] **Mobile App** — On-device inference with TFLite/CoreML
-- [ ] **Multi-Plant Analysis** — Detect and analyze multiple plants in one image
-- [ ] **Species-Specific Models** — Fine-tune for tomatoes, peppers, etc.
-- [ ] **IoT Integration** — Combine with soil moisture, temperature sensors
-- [ ] **HiFi-GAN Vocoder** — Higher quality spectrogram → audio conversion
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- [ ] Real hardware validation with ultrasonic microphones
+- [ ] Mobile app with on-device inference (TFLite / CoreML)
+- [ ] Multi-plant analysis from a single image
+- [ ] Species-specific fine-tuned models
+- [ ] IoT integration with soil moisture and temperature sensors
+- [ ] HiFi-GAN vocoder for higher quality audio
 
 ---
 
-## 🙏 Acknowledgments
+## License
 
-- **Tel Aviv University** — For the groundbreaking plant acoustics research and dataset
-- **Meta AI** — For Segment Anything Model (SAM)
-- **HuggingFace** — For Transformers and model hosting
-- **Groq** — For fast LLM inference API
-- **Microsoft** — For Edge-TTS
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-## 👤 Author
+## Acknowledgments
 
-**Mohith**  
-B.Tech Chemical Engineering + AI/ML Minor  
-Indian Institute of Technology Bombay  
+- **Tel Aviv University** — Groundbreaking plant acoustics research and dataset
+- **Meta AI** — Segment Anything Model (SAM)
+- **HuggingFace** — Transformers and model hosting
+- **Groq** — Fast LLM inference API
+- **Microsoft** — Edge-TTS
 
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue)](https://linkedin.com/in/your-profile)
-[![GitHub](https://img.shields.io/badge/GitHub-Follow-black)](https://github.com/your-username)
-[![Email](https://img.shields.io/badge/Email-Contact-red)](mailto:your-email@iitb.ac.in)
+---
+
+## Author
+
+**Mohith**
+B.Tech Chemical Engineering + AI/ML Minor
+Indian Institute of Technology Bombay
+
+[![GitHub](https://img.shields.io/badge/GitHub-Iammohithhh-black)](https://github.com/Iammohithhh)
 
 ---
 
 <p align="center">
-  <strong>If you found this project interesting, please consider giving it a ⭐!</strong>
+  <strong>If you found this project interesting, please consider giving it a star!</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/stars/your-username/PlantWhisper?style=social" alt="Stars"/>
-  <img src="https://img.shields.io/github/forks/your-username/PlantWhisper?style=social" alt="Forks"/>
+  <img src="https://img.shields.io/github/stars/Iammohithhh/plantwhisper?style=social" alt="Stars"/>
+  <img src="https://img.shields.io/github/forks/Iammohithhh/plantwhisper?style=social" alt="Forks"/>
 </p>
