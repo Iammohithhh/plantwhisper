@@ -294,10 +294,18 @@ def segment_plant(image: np.ndarray) -> tuple:
         except Exception:
             pass
 
-    # Fallback: green detection
+    # Fallback: green detection (tighter range to reduce false positives)
     hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-    mask = cv2.inRange(hsv, (25, 40, 40), (85, 255, 255))
+    mask = cv2.inRange(hsv, (30, 50, 50), (80, 255, 255))
     mask = mask > 0
+
+    # If green pixels cover less than 10% of the image, this isn't a plant —
+    # return an empty mask so is_plant_image() rejects it.
+    coverage = np.sum(mask) / mask.size
+    if coverage < 0.10:
+        empty_mask = np.zeros((h, w), dtype=bool)
+        return image.copy(), empty_mask
+
     segmented = image.copy()
     segmented[~mask] = [240, 240, 240]
     return segmented, mask
@@ -360,9 +368,9 @@ def is_plant_image(mask: np.ndarray, classification: dict) -> bool:
     if confidence < 0.10:
         return False
 
-    # Low confidence combined with weak segmentation — not a plant
-    # (colored objects like UI elements can fool the green HSV fallback)
-    if confidence < 0.30 and mask_coverage < 0.05:
+    # Moderate confidence but weak segmentation — likely not a plant
+    # (non-plant images can fool the classifier into 30-40% confidence)
+    if confidence < 0.40 and mask_coverage < 0.10:
         return False
 
     # Segmentation found essentially nothing
