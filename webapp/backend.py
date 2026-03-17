@@ -344,6 +344,28 @@ def generate_gradcam(image: np.ndarray) -> np.ndarray:
         return image
 
 
+def is_plant_image(mask: np.ndarray, classification: dict) -> bool:
+    """Check if the image actually contains a plant.
+
+    Uses two signals:
+    - Segmentation mask coverage: plants should cover a meaningful portion of the image
+    - Classification confidence: MobileNetV2 trained on PlantVillage will have low
+      confidence on non-plant images
+    """
+    mask_coverage = np.sum(mask) / mask.size if mask is not None else 0.0
+    confidence = classification.get('confidence', 0.0)
+
+    # If segmentation found almost nothing AND classifier is uncertain, not a plant
+    if mask_coverage < 0.02 and confidence < 0.15:
+        return False
+
+    # If segmentation found essentially nothing regardless of confidence
+    if mask_coverage < 0.005:
+        return False
+
+    return True
+
+
 def estimate_stress(classification: dict) -> float:
     """Estimate stress level 0–1."""
     if classification['is_healthy']:
@@ -589,6 +611,10 @@ def analyze_plant(image: np.ndarray, use_diffusion: bool = True):
 
     segmented, mask = segment_plant(image)
     classification = classify_plant(segmented)
+
+    if not is_plant_image(mask, classification):
+        return None, None, "NOT_A_PLANT", "", "", None, None, None
+
     gradcam_img = generate_gradcam(segmented)
 
     stress_level = estimate_stress(classification)
