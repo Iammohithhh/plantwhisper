@@ -50,36 +50,19 @@ classifier.to(device)
 classifier.eval()
 print("✓ Classifier loaded")
 
-# --- Segmentation: FastSAM → SAM ---
+# --- Segmentation: FastSAM only ---
 FASTSAM_AVAILABLE = False
-SAM_AVAILABLE = False
 fastsam_model = None
-sam_predictor = None
 
-print("Loading segmentation...")
+print("Loading FastSAM segmentation...")
 try:
     from ultralytics import YOLO as FastSAM_YOLO
     FASTSAM_CHECKPOINT = "FastSAM-s.pt"
     fastsam_model = FastSAM_YOLO(FASTSAM_CHECKPOINT)
     FASTSAM_AVAILABLE = True
-    print("✓ FastSAM loaded (lightweight)")
+    print("✓ FastSAM loaded")
 except Exception as e:
     print(f"⚠ FastSAM not available: {e}")
-
-if not FASTSAM_AVAILABLE:
-    try:
-        from segment_anything import sam_model_registry, SamPredictor
-        SAM_CHECKPOINT = "sam_vit_b_01ec64.pth"
-        if not os.path.exists(SAM_CHECKPOINT):
-            print("Downloading SAM checkpoint...")
-            os.system(f"wget -q https://dl.fbaipublicfiles.com/segment_anything/{SAM_CHECKPOINT}")
-        sam = sam_model_registry["vit_b"](checkpoint=SAM_CHECKPOINT)
-        sam.to(device)
-        sam_predictor = SamPredictor(sam)
-        SAM_AVAILABLE = True
-        print("✓ SAM loaded (full)")
-    except Exception as e:
-        print(f"⚠ SAM not available: {e}")
 
 # --- Grad-CAM ---
 GRADCAM_AVAILABLE = False
@@ -255,54 +238,44 @@ print("\n🌱 PlantWhisper backend ready!\n")
 # ============================================
 
 def segment_plant(image: np.ndarray) -> tuple:
-    """Segment plant using FastSAM → SAM, or pass through original image."""
+    """Segment the most central object using FastSAM.
+
+    Returns (segmented_image, mask) on success, or (None, None) when FastSAM
+    is unavailable or fails to produce a mask.  A lower confidence threshold
+    (0.25) ensures plants of any colour — not just green — are detected.
+    """
+    if not FASTSAM_AVAILABLE or fastsam_model is None:
+        return None, None
+
     h, w = image.shape[:2]
+    try:
+        results = fastsam_model(
+            image, retina_masks=True, conf=0.25, iou=0.9, verbose=False
+        )
+        if not results or results[0].masks is None:
+            return None, None
 
-    if FASTSAM_AVAILABLE and fastsam_model is not None:
-        try:
-            results = fastsam_model(image, retina_masks=True, conf=0.4, iou=0.9, verbose=False)
-            if results and results[0].masks is not None:
-                masks = results[0].masks.data.cpu().numpy()
-                center_y, center_x = h // 2, w // 2
-                best_idx, best_dist = 0, float('inf')
-                for i, m in enumerate(masks):
-                    m_resized = cv2.resize(m.astype(np.uint8), (w, h)) > 0
-                    ys, xs = np.where(m_resized)
-                    if len(ys) == 0:
-                        continue
-                    cy, cx = ys.mean(), xs.mean()
-                    dist = (cy - center_y) ** 2 + (cx - center_x) ** 2
-                    if dist < best_dist:
-                        best_dist = dist
-                        best_idx = i
-                mask = cv2.resize(masks[best_idx].astype(np.uint8), (w, h)) > 0
-                segmented = image.copy()
-                segmented[~mask] = [240, 240, 240]
-                return segmented, mask
-        except Exception:
-            pass
+        masks = results[0].masks.data.cpu().numpy()
+        center_y, center_x = h // 2, w // 2
+        best_idx, best_dist = 0, float('inf')
+        for i, m in enumerate(masks):
+            m_resized = cv2.resize(m.astype(np.uint8), (w, h)) > 0
+            ys, xs = np.where(m_resized)
+            if len(ys) == 0:
+                continue
+            cy, cx = ys.mean(), xs.mean()
+            dist = (cy - center_y) ** 2 + (cx - center_x) ** 2
+            if dist < best_dist:
+                best_dist = dist
+                best_idx = i
 
-    if SAM_AVAILABLE and sam_predictor is not None:
-        try:
-            sam_predictor.set_image(image)
-            center = np.array([[w // 2, h // 2]])
-            masks, scores, _ = sam_predictor.predict(
-                point_coords=center,
-                point_labels=np.array([1]),
-                multimask_output=True
-            )
-            mask = masks[np.argmax(scores)]
-            segmented = image.copy()
-            segmented[~mask] = [240, 240, 240]
-            return segmented, mask
-        except Exception:
-            pass
-
-    # No segmentation model available — return original image with empty mask.
-    # The classifier works fine on unsegmented images, and HSV green detection
-    # causes more harm than good (misses non-green plant parts, produces garbage
-    # on non-plant images).
-    return image.copy(), np.zeros((h, w), dtype=bool)
+        mask = cv2.resize(masks[best_idx].astype(np.uint8), (w, h)) > 0
+        segmented = image.copy()
+        segmented[~mask] = [240, 240, 240]
+        return segmented, mask
+    except Exception as e:
+        print(f"FastSAM segmentation error: {e}")
+        return None, None
 
 
 def classify_plant(image: np.ndarray) -> dict:
@@ -607,10 +580,14 @@ def analyze_plant(image: np.ndarray, use_diffusion: bool = True):
         image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
 
     segmented, mask = segment_plant(image)
+
+    if segmented is None:
+        return None, None, "⚠️ **Could not segment the image.** FastSAM is either busy or the photo is unclear. Please upload a clear, well-lit photo of a plant and try again.", "", "", None, None, None
+
     classification = classify_plant(segmented)
 
     if not is_plant_image(mask, classification):
-        return None, None, "NOT_A_PLANT", "", "", None, None, None
+        return None, None, "⚠️ **No plant detected in the image.** Please upload a clear photo of a plant and try again.", "", "", None, None, None
 
     gradcam_img = generate_gradcam(segmented)
 
