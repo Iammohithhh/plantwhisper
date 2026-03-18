@@ -349,28 +349,18 @@ def generate_gradcam(image: np.ndarray) -> np.ndarray:
 def is_plant_image(mask: np.ndarray, classification: dict) -> bool:
     """Check if the image actually contains a plant.
 
-    Uses classification confidence as the primary signal. When a segmentation
-    model is available, mask coverage provides an additional check.
-    MobileNetV2 trained on PlantVillage gives 40%+ on real plants but
-    typically <25% on non-plant images (random baseline ~2.6% across 38 classes).
+    Uses classification confidence as the primary signal.  MobileNetV2 trained
+    on PlantVillage gives 40 %+ on real plants but typically < 25 % on non-plant
+    images (random baseline ~2.6 % across 38 classes).  Segmentation mask
+    coverage is *not* trusted alone because SAM/FastSAM happily segments any
+    salient object regardless of whether it is a plant.
     """
-    mask_coverage = np.sum(mask) / mask.size if mask is not None else 0.0
     confidence = classification.get('confidence', 0.0)
-    has_segmentation = mask_coverage > 0.005
 
-    # Very low confidence — almost certainly not a plant
-    if confidence < 0.10:
-        return False
-
-    # No segmentation model available — rely on classifier confidence alone
-    if not has_segmentation:
-        return confidence >= 0.40
-
-    # Have segmentation: moderate confidence + weak mask = not a plant
-    if confidence < 0.40 and mask_coverage < 0.10:
-        return False
-
-    return True
+    # The classifier must show meaningful confidence that the image belongs to
+    # one of its 38 plant-disease classes.  Below 25 % the prediction is
+    # essentially a coin-flip among a handful of classes — reject it.
+    return confidence >= 0.25
 
 
 def estimate_stress(classification: dict) -> float:
