@@ -63,7 +63,13 @@ async def analyze(file: UploadFile = File(...)):
         diffusion_audio,
     ) = pw.analyze_plant(image_np, use_diffusion=True)
 
-    # Check if the image was rejected as not containing a plant
+    # Check for rejection sentinels
+    if status_md == "SEGMENTATION_FAILED":
+        return JSONResponse(
+            {"error": "Could not segment the image — FastSAM is either busy or the photo is unclear. Please upload a clear, well-lit photo of a plant and try again."},
+            status_code=422,
+        )
+
     if status_md == "NOT_A_PLANT":
         return JSONResponse(
             {"error": "No plant detected in the image. Please upload a clear photo of a plant and try again."},
